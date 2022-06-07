@@ -13,14 +13,31 @@ pub struct Config {
     pub database_url: String,
 }
 
-fn read_from_env(env_var: &str) -> String {
-    std::env::var(env_var).expect(
-        format!(
-            "Environment variable `{env_var}` not set",
-            env_var = env_var
-        )
-        .as_ref(),
+fn env_var_not_set_msg(env_var: &str) -> String {
+    format!(
+        "Environment variable `{env_var}` not set",
+        env_var = env_var
     )
+}
+
+fn env_var_parsing_error_msg(env_var: &str) -> String {
+    format!(
+        "Environment variable `{env_var}` cannot be parsed",
+        env_var = env_var,
+    )
+}
+
+fn read_from_env<T: std::fmt::Display + std::str::FromStr + std::fmt::Debug>(env_var: &str) -> T {
+    match std::env::var(env_var)
+        .expect(env_var_not_set_msg(env_var).as_str())
+        .parse()
+    {
+        Ok(parse_value) => parse_value,
+        Err(_) => {
+            log::error!("{}", env_var_parsing_error_msg(env_var));
+            panic!()
+        },
+    }
 }
 
 impl Config {
@@ -30,7 +47,7 @@ impl Config {
         log::info!("Loading configuration");
 
         let host: String = read_from_env("HOST");
-        let port: u16 = read_from_env("PORT").parse().unwrap();
+        let port: u16 = read_from_env("PORT");
         let database_url: String = read_from_env("DATABASE_URL");
 
         Config {
