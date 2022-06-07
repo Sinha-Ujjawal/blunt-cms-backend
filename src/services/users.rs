@@ -1,5 +1,5 @@
-use super::super::models::users::{NewUser, User};
-use super::super::Pool;
+use crate::models::users::{NewUser, User};
+use crate::Pool;
 use crate::diesel::RunQueryDsl;
 use crate::schema::users::dsl::*;
 use actix_web::web;

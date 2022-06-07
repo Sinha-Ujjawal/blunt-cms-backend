@@ -27,7 +27,7 @@ impl Config {
     pub fn from_env() -> Config {
         dotenv().ok();
 
-        println!("Loading configuration");
+        log::info!("Loading configuration");
 
         let host: String = read_from_env("HOST");
         let port: u16 = read_from_env("PORT").parse().unwrap();
@@ -41,12 +41,12 @@ impl Config {
     }
 
     pub fn db_bool(&self) -> Pool {
-        println!("Creating database connection pool.");
+        log::info!("Creating database connection pool.");
         // create db connection Pool
         let manager = ConnectionManager::<PgConnection>::new(&self.database_url);
         r2d2::Pool::builder()
             .build(manager)
-            .expect("Failed to create pool.")
+            .expect("Failed to create pool.".as_ref())
     }
 
     pub fn address(&self) -> String {
