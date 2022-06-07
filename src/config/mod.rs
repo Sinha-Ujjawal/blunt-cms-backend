@@ -62,7 +62,7 @@ impl Config {
         // create db connection Pool
         let manager = ConnectionManager::<PgConnection>::new(&self.database_url);
         r2d2::Pool::builder()
-            .build(manager)
+            .build(manager) // Aborts if `min_idle` is greater than `max_size`. Need to think about retry
             .expect("Failed to create pool.".as_ref())
     }
 
