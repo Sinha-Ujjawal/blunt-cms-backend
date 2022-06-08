@@ -38,7 +38,7 @@ async fn login(
     auth_mgr: web::Data<AuthManager>,
 ) -> actix_web::Result<web::Json<Token>, MyError> {
     match get_user_by_credential(db, input_user) {
-        Ok(user) => match auth_mgr.create_token(user) {
+        Ok(user) => match auth_mgr.create_token(user.id) {
             Some(token) => Ok(web::Json(Token { token: token })),
             None => Err(MyError::TokenCreationError),
         },
