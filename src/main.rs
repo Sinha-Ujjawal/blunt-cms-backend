@@ -27,12 +27,14 @@ async fn main() -> std::io::Result<()> {
     let config = Config::from_env();
 
     let pool = config.db_bool();
+    let auth_mgr = config.auth_mgr();
 
     log::info!("Started server on: {:?}", config.address());
 
     HttpServer::new(move || {
         App::new()
             .app_data(Data::new(pool.clone()))
+            .app_data(Data::new(auth_mgr.clone()))
             .wrap(Logger::default()) // enable logger
             .configure(views::users::config)
     })

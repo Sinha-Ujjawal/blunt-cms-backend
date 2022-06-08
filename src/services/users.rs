@@ -6,14 +6,14 @@ use actix_web::web;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct InputUser {
+pub struct SignUpInput {
     pub username: String,
     pub password: String,
 }
 
 pub fn add_user(
     db: web::Data<Pool>,
-    input_user: web::Json<InputUser>,
+    input_user: web::Json<SignUpInput>,
 ) -> Result<User, diesel::result::Error> {
     let conn = db.get().unwrap();
     let new_user = NewUser {

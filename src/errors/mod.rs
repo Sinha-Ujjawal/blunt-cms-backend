@@ -12,6 +12,12 @@ pub enum MyError {
 
     #[display(fmt = "User Already Exists!")]
     UserAlreadyExists,
+
+    #[display(fmt = "User Does Not Exists!")]
+    UserDoesNotExists,
+
+    #[display(fmt = "Token Creation Error!")]
+    TokenCreationError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,6 +47,8 @@ impl ResponseError for MyError {
         match *self {
             DieselError(_) => StatusCode::BAD_REQUEST,
             UserAlreadyExists => StatusCode::BAD_REQUEST,
+            UserDoesNotExists => StatusCode::BAD_REQUEST,
+            TokenCreationError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
