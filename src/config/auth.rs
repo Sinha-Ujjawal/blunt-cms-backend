@@ -12,7 +12,7 @@ pub struct AuthManager {
     algorithm: Algorithm,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Claims<T> {
     data: T,
     exp: usize,
@@ -38,7 +38,7 @@ impl AuthManager {
         };
 
         let header = Header::new(self.algorithm);
-        match encode(
+        match encode::<Claims<T>>(
             &header,
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
@@ -51,19 +51,19 @@ impl AuthManager {
     fn decode_token<T: DeserializeOwned>(
         &self,
         token: String,
-    ) -> jwt::errors::Result<TokenData<Claims<T>>> {
+    ) -> jwt::errors::Result<TokenData<T>> {
         let validation = Validation::new(self.algorithm);
-        decode::<Claims<T>>(
+        decode::<T>(
             &token,
             &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
             &validation,
         )
     }
 
-    pub fn validate_token<T: DeserializeOwned>(&self, token: String) -> bool {
+    pub fn validate_token<T: DeserializeOwned + std::fmt::Debug>(&self, token: String) -> bool {
         match self.decode_token::<Claims<T>>(token) {
             Ok(_token_message) => true,
-            Err(_) => false,
+            Err(_err) => false
         }
     }
 }

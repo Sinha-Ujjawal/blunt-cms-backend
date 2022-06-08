@@ -18,6 +18,9 @@ pub enum MyError {
 
     #[display(fmt = "Token Creation Error!")]
     TokenCreationError,
+
+    #[display(fmt = "Token Validation Error!")]
+    TokenValidationError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +52,7 @@ impl ResponseError for MyError {
             UserAlreadyExists => StatusCode::BAD_REQUEST,
             UserDoesNotExists => StatusCode::BAD_REQUEST,
             TokenCreationError => StatusCode::INTERNAL_SERVER_ERROR,
+            TokenValidationError => StatusCode::UNAUTHORIZED,
         }
     }
 }

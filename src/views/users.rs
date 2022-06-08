@@ -6,10 +6,10 @@ use crate::services::users::{add_user, SignUpInput};
 use crate::Pool;
 use actix_web::{get, post, web};
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(signup).service(login);
+    cfg.service(signup).service(login).service(validate_token);
 }
 
 #[post("users/signup")]
@@ -26,7 +26,7 @@ async fn signup(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Token {
     token: String,
 }
@@ -38,10 +38,22 @@ async fn login(
     auth_mgr: web::Data<AuthManager>,
 ) -> actix_web::Result<web::Json<Token>, MyError> {
     match get_user_by_credential(db, input_user) {
-        Ok(user) => match auth_mgr.create_token(user.id) {
+        Ok(user) => match auth_mgr.create_token::<i32>(user.id) {
             Some(token) => Ok(web::Json(Token { token: token })),
             None => Err(MyError::TokenCreationError),
         },
         Err(_) => Err(MyError::UserDoesNotExists),
+    }
+}
+
+#[get("users/validate_token")]
+async fn validate_token(
+    token: web::Json<Token>,
+    auth_mgr: web::Data<AuthManager>,
+) -> actix_web::Result<String, MyError> {
+    if auth_mgr.validate_token::<i32>(token.token.clone()) {
+        Ok("true".to_string())
+    } else {
+        Err(MyError::TokenValidationError)
     }
 }
