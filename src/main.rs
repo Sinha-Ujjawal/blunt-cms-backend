@@ -34,7 +34,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(Data::new(pool.clone()))
             .wrap(Logger::default()) // enable logger
-            .service(views::users::signup)
+            .configure(views::users::config)
     })
     .bind((config.host, config.port))?
     .run()

@@ -5,8 +5,12 @@ use crate::Pool;
 use actix_web::{post, web};
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
 
-#[post("/user/signup")]
-pub async fn signup(
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(signup);
+}
+
+#[post("users/signup")]
+async fn signup(
     db: web::Data<Pool>,
     input_user: web::Json<InputUser>,
 ) -> actix_web::Result<web::Json<User>, MyError> {
