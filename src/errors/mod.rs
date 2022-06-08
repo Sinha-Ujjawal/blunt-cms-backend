@@ -21,14 +21,19 @@ struct ErrorResponse {
 
 impl ResponseError for MyError {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code())
+        let (status_code, json) = match serde_json::to_string(&ErrorResponse {
+            error: self.to_string(),
+        }) {
+            Ok(json) => (self.status_code(), json),
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                r#"{"error": "Error parsing the response!"}"#.to_string(),
+            ),
+        };
+
+        HttpResponse::build(status_code)
             .insert_header(ContentType::json())
-            .body(
-                serde_json::json!(ErrorResponse {
-                    error: self.to_string(),
-                })
-                .to_string(),
-            )
+            .body(json)
     }
 
     fn status_code(&self) -> StatusCode {
