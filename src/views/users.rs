@@ -1,9 +1,12 @@
-use crate::config::auth::AuthManager;
-use crate::errors::MyError;
-use crate::models::users::User;
-use crate::selectors::users::{get_user_by_credential, LogInInput};
-use crate::services::users::{add_user, SignUpInput};
-use crate::Pool;
+use crate::{
+    config::auth::AuthManager,
+    config::Pool,
+    errors::MyError,
+    models::users::User,
+    selectors::users::{get_user_by_credential, LogInInput},
+    services::users::{add_user, SignUpInput},
+};
+
 use actix_web::{get, post, web};
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
 use serde::{Deserialize, Serialize};

@@ -1,6 +1,5 @@
-use crate::models::users::User;
-use crate::schema::users::dsl::*;
-use crate::Pool;
+use crate::{config::Pool, models::users::User, schema::users::dsl::*};
+
 use actix_web::web;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};

@@ -1,13 +1,9 @@
-// dependencies
 #[macro_use]
 extern crate diesel;
 use crate::config::Config;
 use actix_web::{middleware::Logger, web::Data, App, HttpServer};
-use diesel::prelude::PgConnection;
-use diesel::r2d2::{self, ConnectionManager};
 use dotenv::dotenv;
 
-// module declarations
 mod config;
 mod errors;
 mod models;
@@ -15,9 +11,6 @@ mod schema;
 mod selectors;
 mod services;
 mod views;
-
-// type declarations
-pub type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

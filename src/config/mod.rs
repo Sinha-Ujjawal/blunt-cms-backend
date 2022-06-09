@@ -2,11 +2,12 @@ use dotenv::dotenv;
 
 use serde::Deserialize;
 
-use crate::Pool;
 use diesel::prelude::PgConnection;
 use diesel::r2d2::ConnectionManager;
 
 pub mod auth;
+
+pub type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

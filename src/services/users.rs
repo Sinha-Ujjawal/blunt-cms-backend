@@ -1,7 +1,11 @@
-use crate::models::users::{NewUser, User};
-use crate::Pool;
-use crate::diesel::RunQueryDsl;
-use crate::schema::users::dsl::*;
+use crate::{
+    config::Pool,
+    models::users::{NewUser, User},
+    schema::users::dsl::*,
+};
+
+use diesel::RunQueryDsl;
+
 use actix_web::web;
 use serde::{Deserialize, Serialize};
 
