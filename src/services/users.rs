@@ -1,10 +1,11 @@
 use crate::{
-    config::Pool,
+    config::DbPoolConnection,
     models::users::{NewUser, User},
     schema::users::dsl::*,
 };
 
 use diesel::RunQueryDsl;
+
 
 use actix_web::web;
 use serde::{Deserialize, Serialize};
@@ -16,10 +17,9 @@ pub struct SignUpInput {
 }
 
 pub fn add_user(
-    db: web::Data<Pool>,
+    conn: DbPoolConnection,
     input_user: web::Json<SignUpInput>,
 ) -> Result<User, diesel::result::Error> {
-    let conn = db.get().unwrap();
     let new_user = NewUser {
         username: &input_user.username,
         password_hash: &input_user.password,

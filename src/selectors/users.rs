@@ -1,4 +1,7 @@
-use crate::{config::Pool, models::users::User, schema::users::dsl::*};
+use crate::{
+    config::DbPoolConnection, models::users::User,
+    schema::users::dsl::*,
+};
 
 use actix_web::web;
 use diesel::prelude::*;
@@ -11,11 +14,9 @@ pub struct LogInInput {
 }
 
 pub fn get_user_by_credential(
-    db: web::Data<Pool>,
+    conn: DbPoolConnection,
     input_user: web::Json<LogInInput>,
 ) -> Result<User, diesel::result::Error> {
-    let conn = db.get().unwrap();
-
     let res = users
         .filter(
             username
@@ -26,3 +27,4 @@ pub fn get_user_by_credential(
 
     Ok(res)
 }
+

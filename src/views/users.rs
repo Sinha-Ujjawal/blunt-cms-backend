@@ -1,6 +1,6 @@
 use crate::{
     config::auth::AuthManager,
-    config::Pool,
+    config::DbPool,
     errors::MyError,
     models::users::User,
     selectors::users::{get_user_by_credential, LogInInput},
@@ -17,15 +17,18 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 #[post("users/signup")]
 async fn signup(
-    db: web::Data<Pool>,
+    db: web::Data<DbPool>,
     input_user: web::Json<SignUpInput>,
 ) -> actix_web::Result<web::Json<User>, MyError> {
-    match add_user(db, input_user) {
-        Ok(user) => Ok(web::Json(user)),
-        Err(DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
-            Err(MyError::UserAlreadyExists)
-        }
-        Err(err) => Err(MyError::DieselError(err)),
+    match db.get() {
+        Err(_) => Err(MyError::InternalServerError),
+        Ok(conn) => match add_user(conn, input_user) {
+            Ok(user) => Ok(web::Json(user)),
+            Err(DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+                Err(MyError::UserAlreadyExists)
+            }
+            Err(err) => Err(MyError::DieselError(err)),
+        },
     }
 }
 
@@ -34,27 +37,36 @@ struct Token {
     token: String,
 }
 
+fn wrap_token_maybe_as_response(
+    token_maybe: Option<String>,
+) -> actix_web::Result<web::Json<Token>, MyError> {
+    match token_maybe {
+        Some(token) => Ok(web::Json(Token { token: token })),
+        None => Err(MyError::TokenCreationError),
+    }
+}
+
 #[get("users/login")]
 async fn login(
-    db: web::Data<Pool>,
+    db: web::Data<DbPool>,
     input_user: web::Json<LogInInput>,
     auth_mgr: web::Data<AuthManager>,
 ) -> actix_web::Result<web::Json<Token>, MyError> {
-    match get_user_by_credential(db, input_user) {
-        Ok(user) => match auth_mgr.create_token::<i32>(user.id) {
-            Some(token) => Ok(web::Json(Token { token: token })),
-            None => Err(MyError::TokenCreationError),
+    match db.get() {
+        Err(_) => Err(MyError::InternalServerError),
+        Ok(conn) => match get_user_by_credential(conn, input_user) {
+            Ok(user) => wrap_token_maybe_as_response(auth_mgr.create_token(user.id)),
+            Err(_) => Err(MyError::UserDoesNotExists),
         },
-        Err(_) => Err(MyError::UserDoesNotExists),
     }
 }
 
 #[get("users/validate_token")]
 async fn validate_token(
-    token: web::Json<Token>,
+    web::Json(Token { token }): web::Json<Token>,
     auth_mgr: web::Data<AuthManager>,
 ) -> actix_web::Result<String, MyError> {
-    if auth_mgr.validate_token::<i32>(token.token.clone()) {
+    if auth_mgr.validate_token::<i32>(token.clone()) {
         Ok("true".to_string())
     } else {
         Err(MyError::TokenValidationError)

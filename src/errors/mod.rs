@@ -21,6 +21,9 @@ pub enum MyError {
 
     #[display(fmt = "Token Validation Error!")]
     TokenValidationError,
+
+    #[display(fmt = "Internal Server Error!")]
+    InternalServerError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,6 +56,7 @@ impl ResponseError for MyError {
             UserDoesNotExists => StatusCode::BAD_REQUEST,
             TokenCreationError => StatusCode::INTERNAL_SERVER_ERROR,
             TokenValidationError => StatusCode::UNAUTHORIZED,
+            InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
