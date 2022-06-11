@@ -1,10 +1,6 @@
 use crate::{
-    config::auth::AuthManager,
-    config::DbPool,
-    errors::MyError,
-    models::users::User,
-    selectors::users::{get_user_by_credential, LogInInput},
-    services::users::{add_user, SignUpInput},
+    config::auth::AuthManager, config::DbPool, errors::MyError,
+    selectors::users::get_user_by_username, services::users::add_user, utils::validate_password,
 };
 
 use actix_web::{get, post, web};
@@ -15,15 +11,34 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(signup).service(login).service(validate_token);
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct SignUpInput {
+    username: String,
+    password: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct UserData {
+    id: i32,
+    username: String,
+}
+
 #[post("users/signup")]
 async fn signup(
     db: web::Data<DbPool>,
     input_user: web::Json<SignUpInput>,
-) -> actix_web::Result<web::Json<User>, MyError> {
+) -> actix_web::Result<web::Json<UserData>, MyError> {
     match db.get() {
         Err(_) => Err(MyError::InternalServerError),
-        Ok(conn) => match add_user(conn, input_user.into_inner()) {
-            Ok(user) => Ok(web::Json(user)),
+        Ok(conn) => match add_user(
+            conn,
+            input_user.username.clone(),
+            input_user.password.clone(),
+        ) {
+            Ok(user) => Ok(web::Json(UserData {
+                id: user.id,
+                username: user.username,
+            })),
             Err(DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
                 Err(MyError::UserAlreadyExists)
             }
@@ -46,6 +61,12 @@ fn wrap_token_maybe_as_response(
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct LogInInput {
+    username: String,
+    password: String,
+}
+
 #[get("users/login")]
 async fn login(
     db: web::Data<DbPool>,
@@ -54,8 +75,14 @@ async fn login(
 ) -> actix_web::Result<web::Json<Token>, MyError> {
     match db.get() {
         Err(_) => Err(MyError::InternalServerError),
-        Ok(conn) => match get_user_by_credential(conn, input_user.into_inner()) {
-            Ok(user) => wrap_token_maybe_as_response(auth_mgr.create_token(user.id)),
+        Ok(conn) => match get_user_by_username(conn, input_user.username.clone()) {
+            Ok(user) => {
+                if validate_password(input_user.password.clone(), user.password_hash) {
+                    wrap_token_maybe_as_response(auth_mgr.create_token(user.id))
+                } else {
+                    Err(MyError::IncorrectPassword)
+                }
+            }
             Err(_) => Err(MyError::UserDoesNotExists),
         },
     }

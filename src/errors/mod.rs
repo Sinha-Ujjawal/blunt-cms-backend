@@ -16,6 +16,9 @@ pub enum MyError {
     #[display(fmt = "User Does Not Exists!")]
     UserDoesNotExists,
 
+    #[display(fmt = "Incorrect Password!")]
+    IncorrectPassword,
+
     #[display(fmt = "Token Creation Error!")]
     TokenCreationError,
 
@@ -57,6 +60,7 @@ impl ResponseError for MyError {
             TokenCreationError => StatusCode::INTERNAL_SERVER_ERROR,
             TokenValidationError => StatusCode::UNAUTHORIZED,
             InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            IncorrectPassword => StatusCode::BAD_REQUEST,
         }
     }
 }

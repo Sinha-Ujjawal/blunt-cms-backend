@@ -1,25 +1,10 @@
 use crate::{config::DbPoolConnection, models::users::User, schema::users::dsl::*};
 
 use diesel::prelude::*;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LogInInput {
-    pub username: String,
-    pub password: String,
-}
-
-pub fn get_user_by_credential(
+pub fn get_user_by_username(
     conn: DbPoolConnection,
-    input_user: LogInInput,
+    user_name: String,
 ) -> Result<User, diesel::result::Error> {
-    let res = users
-        .filter(
-            username
-                .eq(&input_user.username)
-                .and(password_hash.eq(&input_user.password)),
-        )
-        .first::<User>(&conn)?;
-
-    Ok(res)
+    users.filter(username.eq(&user_name)).first::<User>(&conn)
 }
