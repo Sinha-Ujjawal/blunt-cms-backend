@@ -1,9 +1,5 @@
-use crate::{
-    config::DbPoolConnection, models::users::User,
-    schema::users::dsl::*,
-};
+use crate::{config::DbPoolConnection, models::users::User, schema::users::dsl::*};
 
-use actix_web::web;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +11,7 @@ pub struct LogInInput {
 
 pub fn get_user_by_credential(
     conn: DbPoolConnection,
-    input_user: web::Json<LogInInput>,
+    input_user: LogInInput,
 ) -> Result<User, diesel::result::Error> {
     let res = users
         .filter(
@@ -27,4 +23,3 @@ pub fn get_user_by_credential(
 
     Ok(res)
 }
-

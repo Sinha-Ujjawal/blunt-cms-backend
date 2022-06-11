@@ -6,8 +6,6 @@ use crate::{
 
 use diesel::RunQueryDsl;
 
-
-use actix_web::web;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,7 +16,7 @@ pub struct SignUpInput {
 
 pub fn add_user(
     conn: DbPoolConnection,
-    input_user: web::Json<SignUpInput>,
+    input_user: SignUpInput,
 ) -> Result<User, diesel::result::Error> {
     let new_user = NewUser {
         username: &input_user.username,

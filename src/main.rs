@@ -21,7 +21,7 @@ async fn main() -> std::io::Result<()> {
     let db_pool = config.db_pool();
     let auth_mgr = config.auth_mgr();
 
-    log::info!("Started server on: {:?}", config.address());
+    log::info!("Started server on: {}", config.address());
 
     HttpServer::new(move || {
         App::new()

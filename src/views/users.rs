@@ -22,7 +22,7 @@ async fn signup(
 ) -> actix_web::Result<web::Json<User>, MyError> {
     match db.get() {
         Err(_) => Err(MyError::InternalServerError),
-        Ok(conn) => match add_user(conn, input_user) {
+        Ok(conn) => match add_user(conn, input_user.into_inner()) {
             Ok(user) => Ok(web::Json(user)),
             Err(DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
                 Err(MyError::UserAlreadyExists)
@@ -54,7 +54,7 @@ async fn login(
 ) -> actix_web::Result<web::Json<Token>, MyError> {
     match db.get() {
         Err(_) => Err(MyError::InternalServerError),
-        Ok(conn) => match get_user_by_credential(conn, input_user) {
+        Ok(conn) => match get_user_by_credential(conn, input_user.into_inner()) {
             Ok(user) => wrap_token_maybe_as_response(auth_mgr.create_token(user.id)),
             Err(_) => Err(MyError::UserDoesNotExists),
         },
