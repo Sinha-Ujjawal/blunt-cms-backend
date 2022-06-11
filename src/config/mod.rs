@@ -100,10 +100,10 @@ impl Config {
         let jwt_auth_mgr =
             auth::JWTAuthManager::new(self.jwt_secret.clone(), self.jwt_expiration_duration);
         match self.redis_pool_result() {
-            Ok(redis_pool) => auth::AuthManager::RedisJWTAuthManager(jwt_auth_mgr, redis_pool),
+            Ok(redis_pool) => auth::AuthManager::RedisAuthManager(jwt_auth_mgr, redis_pool),
             Err(_) => {
                 log::error!("Failed connecting to redis, fallback to simple-jwt-auth-manager");                
-                auth::AuthManager::SimpleJWTAuthManager(jwt_auth_mgr)
+                auth::AuthManager::SimpleAuthManager(jwt_auth_mgr)
             },
         }
     }

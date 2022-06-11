@@ -75,8 +75,8 @@ impl JWTAuthManager {
 
 #[derive(std::clone::Clone)]
 pub enum AuthManager {
-    SimpleJWTAuthManager(JWTAuthManager),
-    RedisJWTAuthManager(JWTAuthManager, RedisPool),
+    SimpleAuthManager(JWTAuthManager),
+    RedisAuthManager(JWTAuthManager, RedisPool),
 }
 
 impl AuthManager {
@@ -118,8 +118,8 @@ impl AuthManager {
     ) -> Option<String> {
         use AuthManager::*;
         match self {
-            SimpleJWTAuthManager(jwt_auth_mgr) => jwt_auth_mgr.create_token::<T>(data),
-            RedisJWTAuthManager(jwt_auth_mgr, db_redis) => match db_redis.get() {
+            SimpleAuthManager(jwt_auth_mgr) => jwt_auth_mgr.create_token::<T>(data),
+            RedisAuthManager(jwt_auth_mgr, db_redis) => match db_redis.get() {
                 Err(_) => jwt_auth_mgr.create_token::<T>(data),
                 Ok(mut conn) => match Self::get_token_from_cache(&mut conn, data) {
                     Ok(token) if jwt_auth_mgr.validate_token::<T>(token.clone()) => Some(token),
@@ -132,8 +132,8 @@ impl AuthManager {
     pub fn validate_token<T: DeserializeOwned + std::fmt::Debug>(&self, token: String) -> bool {
         use AuthManager::*;
         match self {
-            SimpleJWTAuthManager(jwt_auth_mgr) => jwt_auth_mgr.validate_token::<T>(token),
-            RedisJWTAuthManager(jwt_auth_mgr, _) => jwt_auth_mgr.validate_token::<T>(token),
+            SimpleAuthManager(jwt_auth_mgr) => jwt_auth_mgr.validate_token::<T>(token),
+            RedisAuthManager(jwt_auth_mgr, _) => jwt_auth_mgr.validate_token::<T>(token),
         }
     }
 }
