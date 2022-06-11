@@ -1,6 +1,11 @@
 use crate::{
-    config::auth::AuthManager, config::DbPool, errors::MyError,
-    selectors::users::get_user_by_username, services::users::add_user, utils::validate_password,
+    config::auth::AuthManager,
+    config::DbPool,
+    errors::MyError,
+    models::users::User,
+    selectors::users::{get_user_by_user_id, get_user_by_username},
+    services::users::{add_user, update_user_password},
+    utils::validate_password,
 };
 
 use actix_web::{get, post, web};
@@ -23,28 +28,33 @@ struct UserData {
     username: String,
 }
 
+impl UserData {
+    pub fn from_user(user: User) -> Self {
+        UserData {
+            id: user.id,
+            username: user.username,
+        }
+    }
+}
+
 #[post("users/signup")]
 async fn signup(
     db: web::Data<DbPool>,
     input_user: web::Json<SignUpInput>,
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
-    match db.get() {
-        Err(_) => Err(MyError::InternalServerError),
-        Ok(conn) => match add_user(
-            conn,
-            input_user.username.clone(),
-            input_user.password.clone(),
-        ) {
-            Ok(user) => Ok(web::Json(UserData {
-                id: user.id,
-                username: user.username,
-            })),
-            Err(DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
-                Err(MyError::UserAlreadyExists)
-            }
-            Err(err) => Err(MyError::DieselError(err)),
-        },
-    }
+    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
+
+    let user = add_user(
+        conn,
+        input_user.username.clone(),
+        input_user.password.clone(),
+    )
+    .map_err(|err| match err {
+        DatabaseError(DatabaseErrorKind::UniqueViolation, _) => MyError::UserAlreadyExists,
+        _ => MyError::DieselError(err),
+    })?;
+
+    Ok(web::Json(UserData::from_user(user)))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -73,18 +83,14 @@ async fn login(
     input_user: web::Json<LogInInput>,
     auth_mgr: web::Data<AuthManager>,
 ) -> actix_web::Result<web::Json<Token>, MyError> {
-    match db.get() {
-        Err(_) => Err(MyError::InternalServerError),
-        Ok(conn) => match get_user_by_username(conn, input_user.username.clone()) {
-            Ok(user) => {
-                if validate_password(input_user.password.clone(), user.password_hash) {
-                    wrap_token_maybe_as_response(auth_mgr.create_token(user.id))
-                } else {
-                    Err(MyError::IncorrectPassword)
-                }
-            }
-            Err(_) => Err(MyError::UserDoesNotExists),
-        },
+    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let user = get_user_by_username(conn, input_user.username.clone())
+        .map_err(|_| MyError::UserDoesNotExists)?;
+
+    if validate_password(input_user.password.clone(), user.password_hash) {
+        wrap_token_maybe_as_response(auth_mgr.create_token(user.id))
+    } else {
+        Err(MyError::IncorrectPassword)
     }
 }
 
@@ -98,4 +104,34 @@ async fn validate_token(
     } else {
         Err(MyError::TokenValidationError)
     }
+}
+
+#[derive(Serialize, Deserialize)]
+struct UserChangePasswordInput {
+    new_password: String,
+    token: Token,
+}
+
+#[post("users/change_password")]
+async fn change_password(
+    web::Json(UserChangePasswordInput {
+        new_password,
+        token: Token { token },
+    }): web::Json<UserChangePasswordInput>,
+    auth_mgr: web::Data<AuthManager>,
+    db: web::Data<DbPool>,
+) -> actix_web::Result<web::Json<UserData>, MyError> {
+    let user_id = auth_mgr
+        .extract_claim::<i32>(token)
+        .map_err(|_| MyError::TokenValidationError)?;
+
+    let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let _ = get_user_by_user_id(conn, user_id).map_err(|_| MyError::UserDoesNotExists)?;
+
+    conn = db.get().map_err(|_| MyError::InternalServerError)?;
+
+    let user = update_user_password(conn, user_id, new_password)
+        .map_err(|err| MyError::DieselError(err))?;
+
+    Ok(web::Json(UserData::from_user(user)))
 }

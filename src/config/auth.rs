@@ -53,7 +53,7 @@ impl JWTManager {
         }
     }
 
-    fn decode_token<T: DeserializeOwned>(
+    pub fn decode_token<T: DeserializeOwned>(
         &self,
         token: String,
     ) -> jwt::errors::Result<TokenData<T>> {
@@ -165,5 +165,24 @@ impl AuthManager {
             SimpleAuthManager(jwt_auth_mgr) => jwt_auth_mgr.validate_token::<T>(token),
             RedisAuthManager(jwt_auth_mgr, _) => jwt_auth_mgr.validate_token::<T>(token),
         }
+    }
+
+    pub fn decode_token<T: DeserializeOwned + std::fmt::Debug>(
+        &self,
+        token: String,
+    ) -> jwt::errors::Result<TokenData<T>> {
+        use AuthManager::*;
+        match self {
+            SimpleAuthManager(jwt_auth_mgr) => jwt_auth_mgr.decode_token::<T>(token),
+            RedisAuthManager(jwt_auth_mgr, _) => jwt_auth_mgr.decode_token::<T>(token),
+        }
+    }
+
+    pub fn extract_claim<T: DeserializeOwned + std::fmt::Debug>(
+        &self,
+        token: String,
+    ) -> jwt::errors::Result<T> {
+        let token_data = self.decode_token(token)?;
+        Ok(token_data.claims)
     }
 }
