@@ -65,15 +65,6 @@ struct Token {
     token: String,
 }
 
-fn wrap_token_maybe_as_response(
-    token_maybe: Option<String>,
-) -> actix_web::Result<web::Json<Token>, MyError> {
-    match token_maybe {
-        Some(token) => Ok(web::Json(Token { token: token })),
-        None => Err(MyError::TokenCreationError),
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct LogInInput {
     username: String,
@@ -91,7 +82,10 @@ async fn login(
         .map_err(|_| MyError::UserDoesNotExists)?;
 
     if validate_password(input_user.password.clone(), user.password_hash) {
-        wrap_token_maybe_as_response(auth_mgr.create_token(user.id))
+        let token = auth_mgr
+            .create_token(user.id)
+            .ok_or(MyError::TokenCreationError)?;
+        Ok(web::Json(Token { token: token }))
     } else {
         Err(MyError::IncorrectPassword)
     }

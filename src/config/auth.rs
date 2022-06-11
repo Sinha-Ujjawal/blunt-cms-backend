@@ -43,14 +43,12 @@ impl JWTManager {
         };
 
         let header = Header::new(self.algorithm);
-        match encode::<Claims<T>>(
+        encode::<Claims<T>>(
             &header,
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
-        ) {
-            Ok(token) => Some(token),
-            Err(_) => None,
-        }
+        )
+        .ok()
     }
 
     pub fn decode_token<T: DeserializeOwned>(
@@ -130,16 +128,16 @@ impl AuthManager {
         db_redis: &RedisPool,
         data: T,
     ) -> Option<String> {
+        let token = jwt_auth_mgr.create_token::<T>(data)?;
+
         match db_redis.get() {
-            Err(_) => jwt_auth_mgr.create_token::<T>(data),
-            Ok(mut conn) => match jwt_auth_mgr.create_token::<T>(data) {
-                None => None,
-                Some(token) => {
-                    let _ = Self::cache_token(&mut conn, data, token.clone());
-                    Some(token)
-                }
-            },
-        }
+            Err(_) => {}
+            Ok(mut conn) => {
+                let _ = Self::cache_token(&mut conn, data, token.clone());
+            }
+        };
+
+        Some(token)
     }
 
     pub fn create_token<T: Serialize + DeserializeOwned + ToRedisArgs + std::fmt::Debug + Copy>(
