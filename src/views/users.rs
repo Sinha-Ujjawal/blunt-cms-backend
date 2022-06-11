@@ -13,7 +13,10 @@ use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
 use serde::{Deserialize, Serialize};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(signup).service(login).service(validate_token);
+    cfg.service(signup)
+        .service(login)
+        .service(validate_token)
+        .service(change_password);
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -109,14 +112,14 @@ async fn validate_token(
 #[derive(Serialize, Deserialize)]
 struct UserChangePasswordInput {
     new_password: String,
-    token: Token,
+    token: String,
 }
 
 #[post("users/change_password")]
 async fn change_password(
     web::Json(UserChangePasswordInput {
         new_password,
-        token: Token { token },
+        token,
     }): web::Json<UserChangePasswordInput>,
     auth_mgr: web::Data<AuthManager>,
     db: web::Data<DbPool>,
