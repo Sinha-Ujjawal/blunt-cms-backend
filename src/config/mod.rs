@@ -5,8 +5,6 @@ use serde::Deserialize;
 use diesel::prelude::PgConnection;
 use diesel::r2d2::ConnectionManager;
 
-use r2d2_redis::RedisConnectionManager;
-
 pub mod auth;
 
 pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
@@ -20,7 +18,7 @@ pub struct Config {
     jwt_secret: String,
     jwt_expiration_duration: u32,
     redis_server_url: String,
-    redis_server_get_connection_timeout: u32,
+    redis_server_get_connection_timeout: u64,
 }
 
 fn env_var_not_set_msg(env_var: &str) -> String {
@@ -53,7 +51,6 @@ fn read_from_env<T: std::fmt::Display + std::str::FromStr + std::fmt::Debug>(env
 impl Config {
     pub fn from_env() -> Config {
         dotenv().ok();
-        
         log::info!("Loading configuration");
 
         let host: String = read_from_env("HOST");
@@ -62,7 +59,7 @@ impl Config {
         let jwt_secret: String = read_from_env("JWT_SECRET");
         let jwt_expiration_duration: u32 = read_from_env("JWT_EXPIRATION_DURATION");
         let redis_server_url: String = read_from_env("REDIS_SERVER_URL");
-        let redis_server_get_connection_timeout: u32 =
+        let redis_server_get_connection_timeout: u64 =
             read_from_env("REDIS_SERVER_GET_CONNECTION_TIMEOUT");
 
         Config {
@@ -85,27 +82,13 @@ impl Config {
             .expect("Failed to create pool.".as_ref())
     }
 
-    fn redis_pool_result(&self) -> Result<auth::RedisPool, r2d2::Error> {
-        log::info!("Creating Redis connection pool.");
-        // create redis connection pook
-        let manager = RedisConnectionManager::new(self.redis_server_url.clone()).unwrap();
-        r2d2::Pool::builder()
-            .connection_timeout(std::time::Duration::from_secs(
-                self.redis_server_get_connection_timeout.into(),
-            ))
-            .build(manager) // Aborts if `min_idle` is greater than `max_size`. Need to think about retry
-    }
-
     pub fn auth_mgr(&self) -> auth::AuthManager {
-        let jwt_auth_mgr =
-            auth::JWTAuthManager::new(self.jwt_secret.clone(), self.jwt_expiration_duration);
-        match self.redis_pool_result() {
-            Ok(redis_pool) => auth::AuthManager::RedisAuthManager(jwt_auth_mgr, redis_pool),
-            Err(_) => {
-                log::error!("Failed connecting to redis, fallback to simple-jwt-auth-manager");                
-                auth::AuthManager::SimpleAuthManager(jwt_auth_mgr)
-            },
-        }
+        auth::AuthManager::new(
+            self.jwt_secret.clone(),
+            self.jwt_expiration_duration,
+            self.redis_server_url.clone(),
+            self.redis_server_get_connection_timeout,
+        )
     }
 
     pub fn address(&self) -> String {

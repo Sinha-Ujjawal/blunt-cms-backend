@@ -11,7 +11,7 @@ pub type RedisPool = r2d2::Pool<RedisConnectionManager>;
 pub type RedisPoolConnection = r2d2::PooledConnection<RedisConnectionManager>;
 
 #[derive(Clone)]
-pub struct JWTAuthManager {
+pub struct JWTManager {
     jwt_secret: String,
     expiration_duration: u32,
     algorithm: Algorithm,
@@ -23,9 +23,9 @@ struct Claims<T> {
     exp: usize,
 }
 
-impl JWTAuthManager {
+impl JWTManager {
     pub fn new(jwt_secret: String, expiration_duration: u32) -> Self {
-        JWTAuthManager {
+        JWTManager {
             jwt_secret: jwt_secret,
             expiration_duration: expiration_duration,
             algorithm: Algorithm::HS256,
@@ -75,11 +75,41 @@ impl JWTAuthManager {
 
 #[derive(std::clone::Clone)]
 pub enum AuthManager {
-    SimpleAuthManager(JWTAuthManager),
-    RedisAuthManager(JWTAuthManager, RedisPool),
+    SimpleAuthManager(JWTManager),
+    RedisAuthManager(JWTManager, RedisPool),
 }
 
 impl AuthManager {
+    fn redis_pool_result(
+        redis_server_url: String,
+        redis_server_get_connection_timeout: u64,
+    ) -> Result<RedisPool, r2d2::Error> {
+        log::info!("Creating Redis connection pool.");
+        // create redis connection pook
+        let manager = RedisConnectionManager::new(redis_server_url).unwrap();
+        r2d2::Pool::builder()
+            .connection_timeout(std::time::Duration::from_secs(
+                redis_server_get_connection_timeout,
+            ))
+            .build(manager) // Aborts if `min_idle` is greater than `max_size`. Need to think about retry
+    }
+
+    pub fn new(
+        jwt_secret: String,
+        expiration_duration: u32,
+        redis_server_url: String,
+        redis_server_get_connection_timeout: u64,
+    ) -> Self {
+        let jwt_auth_mgr = JWTManager::new(jwt_secret, expiration_duration);
+        match Self::redis_pool_result(redis_server_url, redis_server_get_connection_timeout) {
+            Ok(redis_pool) => AuthManager::RedisAuthManager(jwt_auth_mgr, redis_pool),
+            Err(_) => {
+                log::error!("Failed connecting to redis, fallback to simple-jwt-auth-manager");
+                AuthManager::SimpleAuthManager(jwt_auth_mgr)
+            }
+        }
+    }
+
     fn cache_token<T: Serialize + ToRedisArgs>(
         conn: &mut RedisPoolConnection,
         data: T,
@@ -96,7 +126,7 @@ impl AuthManager {
     }
 
     fn create_new_token_with_cache<T: Serialize + ToRedisArgs + Copy>(
-        jwt_auth_mgr: &JWTAuthManager,
+        jwt_auth_mgr: &JWTManager,
         db_redis: &RedisPool,
         data: T,
     ) -> Option<String> {
