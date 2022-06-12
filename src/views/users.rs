@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(signup)
         .service(login)
+        .service(get_user)
         .service(validate_token)
         .service(change_password);
 }
@@ -27,27 +28,40 @@ struct UserDataResponse {
 }
 
 impl UserDataResponse {
+    fn from_user_data(user_data: selectors::admins::UserData) -> Self {
+        use selectors::admins::UserData::*;
+        match user_data {
+            SimpleUser(user) => UserDataResponse {
+                id: user.id,
+                username: user.username,
+                is_admin: false,
+                is_super_admin: false,
+            },
+            AdminUser(user, is_super_admin) => UserDataResponse {
+                id: user.id,
+                username: user.username,
+                is_admin: true,
+                is_super_admin: is_super_admin,
+            },
+        }
+    }
+
     pub async fn from_user_id(conn: DbPoolConnection, user_id: i32) -> Result<Self, MyError> {
         let user_data =
             web::block(move || selectors::admins::UserData::from_user_id(&conn, user_id))
                 .await
                 .map_err(|_| MyError::InternalServerError)?
                 .map_err(|_| MyError::UserDoesNotExists)?;
-        use selectors::admins::UserData::*;
-        match user_data {
-            SimpleUser(user) => Ok(UserDataResponse {
-                id: user.id,
-                username: user.username,
-                is_admin: false,
-                is_super_admin: false,
-            }),
-            AdminUser(user, is_super_admin) => Ok(UserDataResponse {
-                id: user.id,
-                username: user.username,
-                is_admin: true,
-                is_super_admin: is_super_admin,
-            }),
-        }
+        Ok(Self::from_user_data(user_data))
+    }
+
+    pub async fn from_user(conn: DbPoolConnection, user: User) -> Result<Self, MyError> {
+        let user_data =
+            web::block(move || selectors::admins::UserData::from_user(&conn, user))
+                .await
+                .map_err(|_| MyError::InternalServerError)?
+                .map_err(|_| MyError::UserDoesNotExists)?;
+        Ok(Self::from_user_data(user_data))
     }
 }
 
@@ -167,6 +181,20 @@ async fn validate_token(
         get_authed_user_from_bearer_token(conn, auth_mgr, bearer_auth.token().to_string()).await?;
 
     Ok("true".to_string())
+}
+
+#[get("users/get_user")]
+async fn get_user(
+    bearer_auth: BearerAuth,
+    auth_mgr: web::Data<AuthManager>,
+    db: web::Data<DbPool>,
+) -> actix_web::Result<web::Json<UserDataResponse>, MyError> {
+    let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let authed_user: AuthedUser =
+        get_authed_user_from_bearer_token(conn, auth_mgr, bearer_auth.token().to_string()).await?;
+    conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let user_data = UserDataResponse::from_user(conn, authed_user.user).await?;
+    Ok(web::Json(user_data))
 }
 
 #[derive(Serialize, Deserialize)]
