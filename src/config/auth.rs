@@ -51,9 +51,9 @@ impl JWTManager {
         .ok()
     }
 
-    pub fn decode_token<T: DeserializeOwned>(
+    pub fn decode_token<'a, T: DeserializeOwned>(
         &self,
-        token: String,
+        token: &'a str,
     ) -> jwt::errors::Result<TokenData<T>> {
         let validation = Validation::new(self.algorithm);
         decode::<T>(
@@ -63,7 +63,7 @@ impl JWTManager {
         )
     }
 
-    pub fn validate_token<T: DeserializeOwned + std::fmt::Debug>(&self, token: String) -> bool {
+    pub fn validate_token<'a, T: DeserializeOwned + std::fmt::Debug>(&self, token: &'a str) -> bool {
         match self.decode_token::<Claims<T>>(token) {
             Ok(_token_message) => true,
             Err(_err) => false,
@@ -150,14 +150,14 @@ impl AuthManager {
             RedisAuthManager(jwt_auth_mgr, db_redis) => match db_redis.get() {
                 Err(_) => jwt_auth_mgr.create_token::<T>(data),
                 Ok(mut conn) => match Self::get_token_from_cache(&mut conn, data) {
-                    Ok(token) if jwt_auth_mgr.validate_token::<T>(token.clone()) => Some(token),
+                    Ok(token) if jwt_auth_mgr.validate_token::<T>(&token) => Some(token),
                     _ => Self::create_new_token_with_cache(jwt_auth_mgr, db_redis, data),
                 },
             },
         }
     }
 
-    pub fn validate_token<T: DeserializeOwned + std::fmt::Debug>(&self, token: String) -> bool {
+    pub fn validate_token<'a, T: DeserializeOwned + std::fmt::Debug>(&self, token: &'a str) -> bool {
         use AuthManager::*;
         match self {
             SimpleAuthManager(jwt_auth_mgr) => jwt_auth_mgr.validate_token::<T>(token),
@@ -165,9 +165,9 @@ impl AuthManager {
         }
     }
 
-    fn decode_token<T: DeserializeOwned + std::fmt::Debug>(
+    fn decode_token<'a, T: DeserializeOwned + std::fmt::Debug>(
         &self,
-        token: String,
+        token: &'a str,
     ) -> jwt::errors::Result<TokenData<Claims<T>>> {
         use AuthManager::*;
         match self {
@@ -176,9 +176,9 @@ impl AuthManager {
         }
     }
 
-    pub fn extract_claim<T: DeserializeOwned + std::fmt::Debug>(
+    pub fn extract_claim<'a, T: DeserializeOwned + std::fmt::Debug>(
         &self,
-        token: String,
+        token: &'a str,
     ) -> jwt::errors::Result<T> {
         let token_data = self.decode_token::<T>(token)?;
         Ok(token_data.claims.data)
