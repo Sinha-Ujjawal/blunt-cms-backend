@@ -43,19 +43,13 @@ async fn add_user(
     conn: DbPoolConnection,
     input_user: SignUpInput,
 ) -> actix_web::Result<User, MyError> {
-    web::block(move || {
-        services::users::add_user(
-            conn,
-            input_user.username.clone(),
-            input_user.password.clone(),
-        )
-    })
-    .await
-    .map_err(|_| MyError::InternalServerError)?
-    .map_err(|err| match err {
-        DatabaseError(DatabaseErrorKind::UniqueViolation, _) => MyError::UserAlreadyExists,
-        _ => MyError::DieselError(err),
-    })
+    web::block(move || services::users::add_user(conn, &input_user.username, &input_user.password))
+        .await
+        .map_err(|_| MyError::InternalServerError)?
+        .map_err(|err| match err {
+            DatabaseError(DatabaseErrorKind::UniqueViolation, _) => MyError::UserAlreadyExists,
+            _ => MyError::DieselError(err),
+        })
 }
 
 #[post("users/signup")]
@@ -83,7 +77,7 @@ async fn get_user_by_username(
     conn: DbPoolConnection,
     user_name: String,
 ) -> actix_web::Result<User, MyError> {
-    web::block(move || selectors::users::get_user_by_username(conn, user_name))
+    web::block(move || selectors::users::get_user_by_username(conn, &user_name))
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|_| MyError::UserDoesNotExists)
@@ -95,10 +89,10 @@ async fn login(
     input_user: web::Json<LogInInput>,
     auth_mgr: web::Data<AuthManager>,
 ) -> actix_web::Result<web::Json<Token>, MyError> {
-    let password = input_user.password.clone();
+    let password = input_user.password.as_bytes();
     let conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let user = get_user_by_username(conn, input_user.username.clone()).await?;
-    if utils::validate_password(password.clone(), user.password_hash) {
+    if utils::validate_password(&password, &user.password_hash) {
         let token = web::block(move || auth_mgr.create_token(user.id))
             .await
             .map_err(|_| MyError::InternalServerError)?
@@ -165,7 +159,7 @@ async fn update_user_password(
     user_id: i32,
     new_password: String,
 ) -> actix_web::Result<User, MyError> {
-    web::block(move || services::users::update_user_password(conn, user_id, new_password))
+    web::block(move || services::users::update_user_password(conn, user_id, &new_password))
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))
