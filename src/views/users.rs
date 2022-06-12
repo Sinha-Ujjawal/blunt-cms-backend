@@ -46,15 +46,6 @@ impl UserDataResponse {
         }
     }
 
-    pub async fn from_user_id(conn: DbPoolConnection, user_id: i32) -> Result<Self, MyError> {
-        let user_data =
-            web::block(move || selectors::admins::UserData::from_user_id(&conn, user_id))
-                .await
-                .map_err(|_| MyError::InternalServerError)?
-                .map_err(|_| MyError::UserDoesNotExists)?;
-        Ok(Self::from_user_data(user_data))
-    }
-
     pub async fn from_user(conn: DbPoolConnection, user: User) -> Result<Self, MyError> {
         let user_data =
             web::block(move || selectors::admins::UserData::from_user(&conn, user))
@@ -92,7 +83,7 @@ async fn signup(
     let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let user = add_user(conn, input_user.into_inner()).await?;
     conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user_data = UserDataResponse::from_user_id(conn, user.id).await?;
+    let user_data = UserDataResponse::from_user(conn, user).await?;
     Ok(web::Json(user_data))
 }
 
@@ -229,7 +220,7 @@ async fn change_password(
     let user = update_user_password(conn, authed_user.user_id, new_password).await?;
 
     conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user_data = UserDataResponse::from_user_id(conn, user.id).await?;
+    let user_data = UserDataResponse::from_user(conn, user).await?;
 
     Ok(web::Json(user_data))
 }

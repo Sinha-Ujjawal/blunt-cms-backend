@@ -2,7 +2,6 @@ use crate::{
     config::DbPoolConnection,
     models::{admins::Admin, users::User},
     schema::admins::dsl::*,
-    selectors::users::get_user_by_user_id,
 };
 
 use diesel::prelude::*;
@@ -20,14 +19,6 @@ pub enum UserData {
 }
 
 impl UserData {
-    pub fn from_user_id(
-        conn: &DbPoolConnection,
-        userid: i32,
-    ) -> Result<Self, diesel::result::Error> {
-        let user = get_user_by_user_id(conn, userid)?;
-        Self::from_user(conn, user)
-    }
-
     pub fn from_user(conn: &DbPoolConnection, user: User) -> Result<Self, diesel::result::Error> {
         use UserData::*;
         match get_admin_by_user_id(conn, user.id) {
