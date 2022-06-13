@@ -28,20 +28,20 @@ pub struct UserData {
 }
 
 impl UserData {
-    pub fn from_user_data(user_data: selectors::admins::UserData) -> Self {
+    pub fn from_user_data(user_data: &selectors::admins::UserData) -> Self {
         use selectors::admins::UserData::*;
         match user_data {
             SimpleUser(user) => UserData {
                 id: user.id,
-                username: user.username,
+                username: user.username.clone(),
                 is_admin: false,
                 is_super_admin: false,
             },
             AdminUser(user, is_super_admin) => UserData {
                 id: user.id,
-                username: user.username,
+                username: user.username.clone(),
                 is_admin: true,
-                is_super_admin: is_super_admin,
+                is_super_admin: *is_super_admin,
             },
         }
     }
@@ -62,7 +62,7 @@ impl UserData {
             .await
             .map_err(|_| MyError::InternalServerError)?
             .map_err(|_| MyError::UserDoesNotExists)?;
-        Ok(Self::from_user_data(user_data))
+        Ok(Self::from_user_data(&user_data))
     }
 }
 
