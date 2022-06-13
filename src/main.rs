@@ -30,6 +30,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(Data::new(auth_mgr.clone()))
             .wrap(Logger::default()) // enable logger
             .configure(views::users::config)
+            .configure(views::posts::config)
     })
     .bind((config.host, config.port))?
     .run()

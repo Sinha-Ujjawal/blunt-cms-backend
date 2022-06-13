@@ -14,7 +14,7 @@ pub fn add_user<'a>(
     password: &'a str,
 ) -> Result<User, diesel::result::Error> {
     let new_user = NewUser {
-        username: &user_name,
+        username: user_name,
         password_hash: &hash_password(password.as_bytes()),
     };
     let res = diesel::insert_into(users)

@@ -27,6 +27,9 @@ pub enum MyError {
 
     #[display(fmt = "Internal Server Error!")]
     InternalServerError,
+
+    #[display(fmt = "You need to be a superuser to perform this action!")]
+    NotSuperAdmin,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,6 +64,7 @@ impl ResponseError for MyError {
             TokenValidationError => StatusCode::UNAUTHORIZED,
             InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
             IncorrectPassword => StatusCode::BAD_REQUEST,
+            NotSuperAdmin => StatusCode::UNAUTHORIZED,
         }
     }
 }
