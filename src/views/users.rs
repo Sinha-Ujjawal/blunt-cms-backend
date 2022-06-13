@@ -46,19 +46,22 @@ impl UserData {
         }
     }
 
-    pub async fn from_bearer_token(db: web::Data<DbPool>, auth_mgr: web::Data<AuthManager>, bearer_token: String) -> Result<Self, MyError> {
+    pub async fn from_bearer_token(
+        db: web::Data<DbPool>,
+        auth_mgr: web::Data<AuthManager>,
+        bearer_auth: BearerAuth,
+    ) -> Result<Self, MyError> {
         let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
-        let authed_user = get_authed_user_from_bearer_token(conn, auth_mgr, bearer_token).await?;
+        let authed_user = AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
         conn = db.get().map_err(|_| MyError::InternalServerError)?;
         Self::from_user(conn, authed_user.user).await
     }
 
     pub async fn from_user(conn: DbPoolConnection, user: User) -> Result<Self, MyError> {
-        let user_data =
-            web::block(move || selectors::admins::UserData::from_user(&conn, user))
-                .await
-                .map_err(|_| MyError::InternalServerError)?
-                .map_err(|_| MyError::UserDoesNotExists)?;
+        let user_data = web::block(move || selectors::admins::UserData::from_user(&conn, user))
+            .await
+            .map_err(|_| MyError::InternalServerError)?
+            .map_err(|_| MyError::UserDoesNotExists)?;
         Ok(Self::from_user_data(user_data))
     }
 }
@@ -142,29 +145,34 @@ pub struct AuthedUser {
 }
 
 impl AuthedUser {
-    pub fn from_token<'a>(
+    async fn from_token(
         conn: DbPoolConnection,
         auth_mgr: web::Data<AuthManager>,
-        token: &'a str,
-    ) -> Option<Self> {
-        let user_id = auth_mgr.extract_claim::<i32>(token).ok()?;
-        let user = selectors::users::get_user_by_user_id(&conn, user_id).ok()?;
-        Some(AuthedUser {
+        token: String,
+    ) -> Result<Self, MyError> {
+        let user_id = web::block(move || auth_mgr.extract_claim::<i32>(&token))
+            .await
+            .map_err(|_| MyError::InternalServerError)?
+            .map_err(|_| MyError::TokenValidationError)?;
+
+        let user = web::block(move || selectors::users::get_user_by_user_id(&conn, user_id))
+            .await
+            .map_err(|_| MyError::InternalServerError)?
+            .map_err(|_| MyError::UserDoesNotExists)?;
+
+        Ok(AuthedUser {
             user_id: user_id,
             user: user,
         })
     }
-}
 
-pub async fn get_authed_user_from_bearer_token(
-    conn: DbPoolConnection,
-    auth_mgr: web::Data<AuthManager>,
-    bearer_token: String,
-) -> actix_web::Result<AuthedUser, MyError> {
-    web::block(move || AuthedUser::from_token(conn, auth_mgr, &bearer_token))
-        .await
-        .map_err(|_| MyError::InternalServerError)?
-        .ok_or(MyError::TokenValidationError)
+    pub async fn from_bearer_token(
+        conn: DbPoolConnection,
+        auth_mgr: web::Data<AuthManager>,
+        bearer_auth: BearerAuth,
+    ) -> Result<Self, MyError> {
+        Self::from_token(conn, auth_mgr, bearer_auth.token().to_string()).await
+    }
 }
 
 #[get("users/validate_token")]
@@ -176,7 +184,7 @@ async fn validate_token(
     let conn = db.get().map_err(|_| MyError::InternalServerError)?;
 
     let _: AuthedUser =
-        get_authed_user_from_bearer_token(conn, auth_mgr, bearer_auth.token().to_string()).await?;
+        AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
 
     Ok("true".to_string())
 }
@@ -189,7 +197,7 @@ async fn get_user(
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
     let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let authed_user: AuthedUser =
-        get_authed_user_from_bearer_token(conn, auth_mgr, bearer_auth.token().to_string()).await?;
+        AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
     conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let user_data = UserData::from_user(conn, authed_user.user).await?;
     Ok(web::Json(user_data))
@@ -221,7 +229,7 @@ async fn change_password(
     let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
 
     let authed_user: AuthedUser =
-        get_authed_user_from_bearer_token(conn, auth_mgr, bearer_auth.token().to_string()).await?;
+        AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
 
     conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let user = update_user_password(conn, authed_user.user_id, new_password).await?;
