@@ -10,8 +10,8 @@ mod models;
 mod schema;
 mod selectors;
 mod services;
-mod views;
 mod utils;
+mod views;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -31,6 +31,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default()) // enable logger
             .configure(views::users::config)
             .configure(views::posts::config)
+            .configure(views::drafts::config)
     })
     .bind((config.host, config.port))?
     .run()
