@@ -1,7 +1,6 @@
 use crate::{
     config::DbPoolConnection,
     models::users::{NewUser, User},
-    schema::users::dsl::*,
     utils::hash_password,
 };
 
@@ -13,6 +12,7 @@ pub fn add_user<'a>(
     user_name: &'a str,
     password: &'a str,
 ) -> Result<User, diesel::result::Error> {
+    use crate::schema::users::dsl::*;
     let new_user = NewUser {
         username: user_name,
         password_hash: &hash_password(password.as_bytes()),
@@ -28,6 +28,7 @@ pub fn update_user_password<'a>(
     user_id: i32,
     new_password: &'a str,
 ) -> Result<User, diesel::result::Error> {
+    use crate::schema::users::dsl::*;
     diesel::update(users.filter(id.eq(user_id)))
         .set((
             password_hash.eq(&hash_password(new_password.as_bytes())),

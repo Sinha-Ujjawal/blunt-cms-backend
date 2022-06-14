@@ -1,7 +1,6 @@
 use crate::{
     config::DbPoolConnection,
     models::{admins::Admin, users::User},
-    schema::admins::dsl::*,
 };
 
 use diesel::prelude::*;
@@ -10,6 +9,7 @@ pub fn get_admin_by_user_id(
     conn: &DbPoolConnection,
     userid: i32,
 ) -> Result<Admin, diesel::result::Error> {
+    use crate::schema::admins::dsl::*;
     admins.filter(user_id.eq(&userid)).first::<Admin>(conn)
 }
 

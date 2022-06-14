@@ -1,7 +1,6 @@
 use crate::{
     config::DbPoolConnection,
     models::posts::{NewPost, Post},
-    schema::posts::dsl::*,
 };
 
 use diesel::prelude::*;
@@ -11,6 +10,8 @@ pub fn add_post<'a>(
     subject: &'a str,
     body: &'a str,
 ) -> Result<Post, diesel::result::Error> {
+    use crate::schema::posts::dsl::*;
+
     let new_post = NewPost {
         post_subject: subject,
         post_body: body,
