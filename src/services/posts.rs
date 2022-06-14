@@ -50,3 +50,13 @@ pub fn update_post_body<'a>(
         .get_result(conn)?;
     Ok(res)
 }
+
+pub fn delete_post<'a>(
+    conn: &DbPoolConnection,
+    post_id: i32,
+) -> Result<Post, diesel::result::Error> {
+    use crate::schema::posts::dsl::*;
+
+    let res = diesel::delete(posts.filter(id.eq(post_id))).get_result(conn)?;
+    Ok(res)
+}

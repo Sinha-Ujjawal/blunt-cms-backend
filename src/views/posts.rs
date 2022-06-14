@@ -13,7 +13,8 @@ use std::vec::Vec;
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_post)
         .service(get_posts)
-        .service(update_post);
+        .service(update_post)
+        .service(delete_post);
 }
 
 #[derive(Serialize, Deserialize)]
@@ -153,4 +154,23 @@ async fn update_post(
     };
 
     Ok(web::Json(PostData::from_post(&post)))
+}
+
+#[post("/posts/delete/{post_id}")]
+async fn delete_post(
+    path: web::Path<i32>,
+    bearer_auth: BearerAuth,
+    db: web::Data<DbPool>,
+    auth_mgr: web::Data<AuthManager>,
+) -> actix_web::Result<String, MyError> {
+    let post_id = path.into_inner();
+    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let _ = ensure_super_admin(bearer_auth, db, auth_mgr).await?;
+    web::block(move || {
+        let _ = services::posts::delete_post(&conn, post_id)?;
+        Ok("Success!".to_string())
+    })
+    .await
+    .map_err(|_| MyError::InternalServerError)?
+    .map_err(|err| MyError::DieselError(err))
 }
