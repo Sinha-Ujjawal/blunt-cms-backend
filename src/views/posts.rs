@@ -5,13 +5,15 @@ use crate::{
     selectors, services, views,
 };
 
-use actix_web::{get, post, web};
+use actix_web::{get, post, web, Either};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use serde::{Deserialize, Serialize};
 use std::vec::Vec;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(create_post).service(get_posts);
+    cfg.service(create_post)
+        .service(get_posts)
+        .service(update_post);
 }
 
 #[derive(Serialize, Deserialize)]
@@ -94,4 +96,61 @@ async fn get_posts(
             .map(|post| PostData::from_post(post))
             .collect::<Vec<PostData>>(),
     ))
+}
+
+#[derive(Serialize, Deserialize)]
+struct UpdatePostSubject {
+    new_subject: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct UpdatePostBody {
+    new_body: String,
+}
+
+type UpdatePostData = Either<web::Json<UpdatePostSubject>, web::Json<UpdatePostBody>>;
+
+async fn update_post_subject(
+    conn: DbPoolConnection,
+    post_id: i32,
+    new_subject: String,
+) -> actix_web::Result<Post, MyError> {
+    web::block(move || services::posts::update_post_subject(&conn, post_id, &new_subject))
+        .await
+        .map_err(|_| MyError::InternalServerError)?
+        .map_err(|err| MyError::DieselError(err))
+}
+
+async fn update_post_body(
+    conn: DbPoolConnection,
+    post_id: i32,
+    new_body: String,
+) -> actix_web::Result<Post, MyError> {
+    web::block(move || services::posts::update_post_body(&conn, post_id, &new_body))
+        .await
+        .map_err(|_| MyError::InternalServerError)?
+        .map_err(|err| MyError::DieselError(err))
+}
+
+#[post("/posts/update/{post_id}")]
+async fn update_post(
+    path: web::Path<i32>,
+    bearer_auth: BearerAuth,
+    db: web::Data<DbPool>,
+    auth_mgr: web::Data<AuthManager>,
+    new_post_data: UpdatePostData,
+) -> actix_web::Result<web::Json<PostData>, MyError> {
+    let post_id = path.into_inner();
+    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let _ = ensure_super_admin(bearer_auth, db, auth_mgr).await?;
+    let post = match new_post_data {
+        Either::Left(web::Json(UpdatePostSubject { new_subject })) => {
+            update_post_subject(conn, post_id, new_subject).await?
+        }
+        Either::Right(web::Json(UpdatePostBody { new_body })) => {
+            update_post_body(conn, post_id, new_body).await?
+        }
+    };
+
+    Ok(web::Json(PostData::from_post(&post)))
 }
