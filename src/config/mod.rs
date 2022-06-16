@@ -1,5 +1,6 @@
 use dotenv::dotenv;
 
+use actix_cors::Cors;
 use serde::Deserialize;
 
 use diesel::prelude::PgConnection;
@@ -10,15 +11,16 @@ pub mod auth;
 pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 pub type DbPoolConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub host: String,
-    pub port: u16,
+    host: String,
+    port: u16,
     database_url: String,
     jwt_secret: String,
     jwt_expiration_duration: u32,
     redis_server_url: String,
     redis_server_get_connection_timeout: u64,
+    cors_allow_all: u8,
 }
 
 fn env_var_not_set_msg(env_var: &str) -> String {
@@ -49,6 +51,14 @@ fn read_from_env<T: std::fmt::Display + std::str::FromStr + std::fmt::Debug>(env
 }
 
 impl Config {
+    pub fn host(&self) -> String {
+        self.host.clone()
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     pub fn from_env() -> Config {
         dotenv().ok();
         log::info!("Loading configuration");
@@ -61,6 +71,7 @@ impl Config {
         let redis_server_url: String = read_from_env("REDIS_SERVER_URL");
         let redis_server_get_connection_timeout: u64 =
             read_from_env("REDIS_SERVER_GET_CONNECTION_TIMEOUT");
+        let cors_allow_all: u8 = read_from_env("CORS_ALLOW_ALL");
 
         Config {
             host: host,
@@ -70,6 +81,7 @@ impl Config {
             jwt_expiration_duration: jwt_expiration_duration,
             redis_server_url: redis_server_url,
             redis_server_get_connection_timeout: redis_server_get_connection_timeout,
+            cors_allow_all: cors_allow_all,
         }
     }
 
@@ -91,7 +103,13 @@ impl Config {
         )
     }
 
-    pub fn address(&self) -> String {
-        format!("http://{}:{}", self.host, self.port)
+    pub fn cors(&self) -> Cors {
+        if self.cors_allow_all == 1 {
+            log::info!("Allowing Any Origin");
+            Cors::permissive()
+        } else {
+            log::info!("Default Cors Setup");
+            Cors::default()
+        }
     }
 }

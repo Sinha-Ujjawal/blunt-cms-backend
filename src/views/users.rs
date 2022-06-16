@@ -3,6 +3,7 @@ use crate::{
     config::{DbPool, DbPoolConnection},
     errors::MyError,
     models::users::User,
+    openapi::addons::BearerSecurity,
     selectors, services, utils,
 };
 
@@ -10,6 +11,30 @@ use actix_web::{get, post, web};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
 use serde::{Deserialize, Serialize};
+use utoipa::{Component, OpenApi};
+
+#[derive(OpenApi)]
+#[openapi(
+    handlers(
+        signup,
+        login,
+        get_user,
+        validate_token,
+        change_password,
+    ),
+    components(
+        UserData,
+        SignUpInput,
+        Token,
+        LogInInput,
+        UserChangePasswordInput,
+    ),
+    tags(
+        (name = "/users", description = "Content Management System Apis (User Auth)")
+    ),
+    modifiers(&BearerSecurity)
+)]
+pub struct ApiDoc;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(signup)
@@ -19,7 +44,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(change_password);
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Component)]
 pub struct UserData {
     pub id: i32,
     pub username: String,
@@ -66,7 +91,7 @@ impl UserData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Component)]
 struct SignUpInput {
     username: String,
     password: String,
@@ -85,7 +110,13 @@ async fn add_user(
         })
 }
 
-#[post("users/signup")]
+#[utoipa::path(
+    request_body=SignUpInput,
+    responses(
+        (status = 200, description = "Sign up", body = UserData)
+    )
+)]
+#[post("/users/signup")]
 async fn signup(
     db: web::Data<DbPool>,
     input_user: web::Json<SignUpInput>,
@@ -97,12 +128,12 @@ async fn signup(
     Ok(web::Json(user_data))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Component)]
 struct Token {
     token: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Component)]
 struct LogInInput {
     username: String,
     password: String,
@@ -118,7 +149,13 @@ async fn get_user_by_username(
         .map_err(|_| MyError::UserDoesNotExists)
 }
 
-#[get("users/login")]
+#[utoipa::path(
+    request_body=LogInInput,
+    responses(
+        (status = 200, description = "Log in", body = Token)
+    )
+)]
+#[post("/users/login")]
 async fn login(
     db: web::Data<DbPool>,
     input_user: web::Json<LogInInput>,
@@ -175,7 +212,15 @@ impl AuthedUser {
     }
 }
 
-#[get("users/validate_token")]
+#[utoipa::path(
+    responses(
+        (status = 200, description = "Validate token", body = String)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+#[get("/users/validate_token")]
 async fn validate_token(
     bearer_auth: BearerAuth,
     auth_mgr: web::Data<AuthManager>,
@@ -183,13 +228,20 @@ async fn validate_token(
 ) -> actix_web::Result<String, MyError> {
     let conn = db.get().map_err(|_| MyError::InternalServerError)?;
 
-    let _: AuthedUser =
-        AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
+    let _: AuthedUser = AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
 
     Ok("true".to_string())
 }
 
-#[get("users/get_user")]
+#[utoipa::path(
+    responses(
+        (status = 200, description = "Get User data", body = UserData)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+#[get("/users/get_user")]
 async fn get_user(
     bearer_auth: BearerAuth,
     auth_mgr: web::Data<AuthManager>,
@@ -203,7 +255,7 @@ async fn get_user(
     Ok(web::Json(user_data))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Component)]
 struct UserChangePasswordInput {
     new_password: String,
 }
@@ -219,7 +271,16 @@ async fn update_user_password(
         .map_err(|err| MyError::DieselError(err))
 }
 
-#[post("users/change_password")]
+#[utoipa::path(
+    request_body=UserChangePasswordInput,
+    responses(
+        (status = 200, description = "Get User data", body = UserData)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+#[post("/users/change_password")]
 async fn change_password(
     web::Json(UserChangePasswordInput { new_password }): web::Json<UserChangePasswordInput>,
     bearer_auth: BearerAuth,
