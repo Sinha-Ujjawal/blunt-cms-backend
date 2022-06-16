@@ -60,7 +60,7 @@ async fn create_post(
     post_data: web::Json<CreatePostData>,
 ) -> actix_web::Result<web::Json<PostData>, MyError> {
     let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _ = views::admins::ensure_super_admin(bearer_auth, db, auth_mgr).await?;
+    let _ = views::admins::ensure_admin(bearer_auth, db, auth_mgr).await?;
     let post = add_post(conn, post_data).await?;
     Ok(web::Json(PostData::from_post(&post)))
 }
@@ -131,7 +131,7 @@ async fn update_post(
 ) -> actix_web::Result<web::Json<PostData>, MyError> {
     let post_id = path.into_inner();
     let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _ = views::admins::ensure_super_admin(bearer_auth, db, auth_mgr).await?;
+    let _ = views::admins::ensure_admin(bearer_auth, db, auth_mgr).await?;
     let post = match new_post_data {
         Either::Left(web::Json(UpdatePostSubject { new_subject })) => {
             update_post_subject(conn, post_id, new_subject).await?
@@ -153,7 +153,7 @@ async fn delete_post(
 ) -> actix_web::Result<String, MyError> {
     let post_id = path.into_inner();
     let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _ = views::admins::ensure_super_admin(bearer_auth, db, auth_mgr).await?;
+    let _ = views::admins::ensure_admin(bearer_auth, db, auth_mgr).await?;
     web::block(move || {
         let _ = services::posts::delete_post(&conn, post_id)?;
         Ok("Success!".to_string())

@@ -157,14 +157,6 @@ impl AuthManager {
         }
     }
 
-    pub fn validate_token<'a, T: DeserializeOwned + std::fmt::Debug>(&self, token: &'a str) -> bool {
-        use AuthManager::*;
-        match self {
-            SimpleAuthManager(jwt_auth_mgr) => jwt_auth_mgr.validate_token::<T>(token),
-            RedisAuthManager(jwt_auth_mgr, _) => jwt_auth_mgr.validate_token::<T>(token),
-        }
-    }
-
     fn decode_token<'a, T: DeserializeOwned + std::fmt::Debug>(
         &self,
         token: &'a str,

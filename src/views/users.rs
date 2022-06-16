@@ -49,26 +49,15 @@ pub struct UserData {
     pub id: i32,
     pub username: String,
     pub is_admin: bool,
-    pub is_super_admin: bool,
 }
 
 impl UserData {
-    pub fn from_user_data(user_data: &selectors::admins::UserData) -> Self {
-        use selectors::admins::UserData::*;
-        match user_data {
-            SimpleUser(user) => UserData {
-                id: user.id,
-                username: user.username.clone(),
-                is_admin: false,
-                is_super_admin: false,
-            },
-            AdminUser(user, is_super_admin) => UserData {
-                id: user.id,
-                username: user.username.clone(),
-                is_admin: true,
-                is_super_admin: *is_super_admin,
-            },
-        }
+    pub fn from_user(user: User) -> Self {
+        UserData {
+            id: user.id,
+            username: user.username,
+            is_admin: user.is_admin,
+        }   
     }
 
     pub async fn from_bearer_token(
@@ -76,18 +65,9 @@ impl UserData {
         auth_mgr: web::Data<AuthManager>,
         bearer_auth: BearerAuth,
     ) -> Result<Self, MyError> {
-        let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
+        let conn = db.get().map_err(|_| MyError::InternalServerError)?;
         let authed_user = AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
-        conn = db.get().map_err(|_| MyError::InternalServerError)?;
-        Self::from_user(conn, authed_user.user).await
-    }
-
-    pub async fn from_user(conn: DbPoolConnection, user: User) -> Result<Self, MyError> {
-        let user_data = web::block(move || selectors::admins::UserData::from_user(&conn, user))
-            .await
-            .map_err(|_| MyError::InternalServerError)?
-            .map_err(|_| MyError::UserDoesNotExists)?;
-        Ok(Self::from_user_data(&user_data))
+        Ok(Self::from_user(authed_user.user))
     }
 }
 
@@ -121,11 +101,9 @@ async fn signup(
     db: web::Data<DbPool>,
     input_user: web::Json<SignUpInput>,
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
-    let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let user = add_user(conn, input_user.into_inner()).await?;
-    conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user_data = UserData::from_user(conn, user).await?;
-    Ok(web::Json(user_data))
+    Ok(web::Json(UserData::from_user(user)))
 }
 
 #[derive(Serialize, Deserialize, Component)]
@@ -247,12 +225,10 @@ async fn get_user(
     auth_mgr: web::Data<AuthManager>,
     db: web::Data<DbPool>,
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
-    let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let authed_user: AuthedUser =
         AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
-    conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user_data = UserData::from_user(conn, authed_user.user).await?;
-    Ok(web::Json(user_data))
+    Ok(web::Json(UserData::from_user(authed_user.user)))
 }
 
 #[derive(Serialize, Deserialize, Component)]
@@ -295,8 +271,5 @@ async fn change_password(
     conn = db.get().map_err(|_| MyError::InternalServerError)?;
     let user = update_user_password(conn, authed_user.user_id, new_password).await?;
 
-    conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user_data = UserData::from_user(conn, user).await?;
-
-    Ok(web::Json(user_data))
+    Ok(web::Json(UserData::from_user(user)))
 }

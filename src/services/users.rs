@@ -16,6 +16,7 @@ pub fn add_user<'a>(
     let new_user = NewUser {
         username: user_name,
         password_hash: &hash_password(password.as_bytes()),
+        is_admin: false, // all new users are not admin by default
     };
     let res = diesel::insert_into(users)
         .values(&new_user)

@@ -2,7 +2,7 @@ use crate::{
     config::{auth::AuthManager, DbPool, DbPoolConnection},
     errors::MyError,
     models::drafts::Draft,
-    selectors, services, views,
+    services, views,
 };
 
 use actix_web::{post, web};

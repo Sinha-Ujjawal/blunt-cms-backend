@@ -1,14 +1,4 @@
 table! {
-    admins (id) {
-        id -> Int4,
-        user_id -> Int4,
-        is_super_user -> Bool,
-        created_at -> Timestamp,
-        updated_at -> Timestamp,
-    }
-}
-
-table! {
     drafts (id) {
         id -> Int4,
         draft_subject -> Text,
@@ -34,16 +24,15 @@ table! {
         id -> Int4,
         username -> Varchar,
         password_hash -> Varchar,
+        is_admin -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }
 }
 
-joinable!(admins -> users (user_id));
 joinable!(drafts -> posts (post_id));
 
 allow_tables_to_appear_in_same_query!(
-    admins,
     drafts,
     posts,
     users,
