@@ -1,4 +1,4 @@
-use crate::schema::*;
+use crate::db::schema::users;
 
 use serde::{Deserialize, Serialize};
 

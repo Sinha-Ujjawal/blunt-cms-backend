@@ -1,80 +1,20 @@
-use chrono::offset::Utc;
+use crate::auth::simple_jwt_helper::{Claims, SimpleJWT};
+use actix::{Actor, Handler, Message, SyncContext};
 use jsonwebtoken as jwt;
-use jsonwebtoken::{
-    decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
-};
+use jsonwebtoken::TokenData;
+use serde::{de::DeserializeOwned, Serialize};
+use std::marker::PhantomData;
+
 use r2d2_redis::redis::{Commands, RedisError, ToRedisArgs};
 use r2d2_redis::RedisConnectionManager;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub type RedisPool = r2d2::Pool<RedisConnectionManager>;
 pub type RedisPoolConnection = r2d2::PooledConnection<RedisConnectionManager>;
 
-#[derive(Clone)]
-pub struct JWTManager {
-    jwt_secret: String,
-    expiration_duration: u32,
-    algorithm: Algorithm,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims<T> {
-    data: T,
-    exp: usize,
-}
-
-impl JWTManager {
-    pub fn new(jwt_secret: String, expiration_duration: u32) -> Self {
-        JWTManager {
-            jwt_secret: jwt_secret,
-            expiration_duration: expiration_duration,
-            algorithm: Algorithm::HS256,
-        }
-    }
-
-    pub fn create_token<T: Serialize>(&self, data: T) -> Option<String> {
-        let expiration = Utc::now()
-            .checked_add_signed(chrono::Duration::seconds(self.expiration_duration as i64))
-            .expect("Valid Timestamp")
-            .timestamp();
-        let claims = Claims {
-            data: data,
-            exp: expiration as usize,
-        };
-
-        let header = Header::new(self.algorithm);
-        encode::<Claims<T>>(
-            &header,
-            &claims,
-            &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
-        )
-        .ok()
-    }
-
-    pub fn decode_token<'a, T: DeserializeOwned>(
-        &self,
-        token: &'a str,
-    ) -> jwt::errors::Result<TokenData<T>> {
-        let validation = Validation::new(self.algorithm);
-        decode::<T>(
-            &token,
-            &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
-            &validation,
-        )
-    }
-
-    pub fn validate_token<'a, T: DeserializeOwned + std::fmt::Debug>(&self, token: &'a str) -> bool {
-        match self.decode_token::<Claims<T>>(token) {
-            Ok(_token_message) => true,
-            Err(_err) => false,
-        }
-    }
-}
-
 #[derive(std::clone::Clone)]
 pub enum AuthManager {
-    SimpleAuthManager(JWTManager),
-    RedisAuthManager(JWTManager, RedisPool),
+    SimpleAuthManager(SimpleJWT),
+    RedisAuthManager(SimpleJWT, RedisPool),
 }
 
 impl AuthManager {
@@ -98,7 +38,7 @@ impl AuthManager {
         redis_server_url: String,
         redis_server_get_connection_timeout: u64,
     ) -> Self {
-        let jwt_auth_mgr = JWTManager::new(jwt_secret, expiration_duration);
+        let jwt_auth_mgr = SimpleJWT::new(jwt_secret, expiration_duration);
         match Self::redis_pool_result(redis_server_url, redis_server_get_connection_timeout) {
             Ok(redis_pool) => AuthManager::RedisAuthManager(jwt_auth_mgr, redis_pool),
             Err(_) => {
@@ -124,7 +64,7 @@ impl AuthManager {
     }
 
     fn create_new_token_with_cache<T: Serialize + ToRedisArgs + Copy>(
-        jwt_auth_mgr: &JWTManager,
+        jwt_auth_mgr: &SimpleJWT,
         db_redis: &RedisPool,
         data: T,
     ) -> Option<String> {
@@ -140,7 +80,7 @@ impl AuthManager {
         Some(token)
     }
 
-    pub fn create_token<T: Serialize + DeserializeOwned + ToRedisArgs + std::fmt::Debug + Copy>(
+    pub fn create_token<T: Serialize + DeserializeOwned + ToRedisArgs + Copy>(
         &self,
         data: T,
     ) -> Option<String> {
@@ -157,7 +97,7 @@ impl AuthManager {
         }
     }
 
-    fn decode_token<'a, T: DeserializeOwned + std::fmt::Debug>(
+    fn decode_token<'a, T: DeserializeOwned>(
         &self,
         token: &'a str,
     ) -> jwt::errors::Result<TokenData<Claims<T>>> {
@@ -168,11 +108,46 @@ impl AuthManager {
         }
     }
 
-    pub fn extract_claim<'a, T: DeserializeOwned + std::fmt::Debug>(
+    pub fn extract_claim<'a, T: DeserializeOwned>(
         &self,
         token: &'a str,
     ) -> jwt::errors::Result<T> {
         let token_data = self.decode_token::<T>(token)?;
         Ok(token_data.claims.data)
+    }
+}
+
+impl Actor for AuthManager {
+    type Context = SyncContext<Self>;
+}
+
+#[derive(Message)]
+#[rtype(result = "Option<String>")]
+pub struct CreateToken<T: Serialize + DeserializeOwned + ToRedisArgs + std::fmt::Debug + Copy> {
+    pub data: T,
+}
+
+impl<T: Serialize + DeserializeOwned + ToRedisArgs + std::fmt::Debug + Copy> Handler<CreateToken<T>>
+    for AuthManager
+{
+    type Result = Option<String>;
+
+    fn handle(&mut self, msg: CreateToken<T>, _: &mut Self::Context) -> Self::Result {
+        self.create_token(msg.data)
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "jwt::errors::Result<T>")]
+pub struct ExtractClaim<T: 'static + DeserializeOwned + std::fmt::Debug> {
+    pub token: String,
+    pub phantom: PhantomData<T>,
+}
+
+impl<T: DeserializeOwned + std::fmt::Debug> Handler<ExtractClaim<T>> for AuthManager {
+    type Result = jwt::errors::Result<T>;
+
+    fn handle(&mut self, msg: ExtractClaim<T>, _: &mut Self::Context) -> Self::Result {
+        self.extract_claim(&msg.token)
     }
 }

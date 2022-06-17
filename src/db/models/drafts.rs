@@ -1,4 +1,4 @@
-use crate::{models::posts::Post, schema::*};
+use crate::{db::models::posts::Post, db::schema::drafts};
 
 use serde::{Deserialize, Serialize};
 

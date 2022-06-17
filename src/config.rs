@@ -1,26 +1,17 @@
 use dotenv::dotenv;
 
-use actix_cors::Cors;
 use serde::Deserialize;
-
-use diesel::prelude::PgConnection;
-use diesel::r2d2::ConnectionManager;
-
-pub mod auth;
-
-pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
-pub type DbPoolConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    host: String,
-    port: u16,
-    database_url: String,
-    jwt_secret: String,
-    jwt_expiration_duration: u32,
-    redis_server_url: String,
-    redis_server_get_connection_timeout: u64,
-    cors_allow_all: u8,
+    pub host: String,
+    pub port: u16,
+    pub database_url: String,
+    pub jwt_secret: String,
+    pub jwt_expiration_duration: u32,
+    pub redis_server_url: String,
+    pub redis_server_get_connection_timeout: u64,
+    pub cors_allow_all: u8,
 }
 
 fn env_var_not_set_msg(env_var: &str) -> String {
@@ -51,14 +42,6 @@ fn read_from_env<T: std::fmt::Display + std::str::FromStr + std::fmt::Debug>(env
 }
 
 impl Config {
-    pub fn host(&self) -> String {
-        self.host.clone()
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     pub fn from_env() -> Config {
         dotenv().ok();
         log::info!("Loading configuration");
@@ -82,34 +65,6 @@ impl Config {
             redis_server_url: redis_server_url,
             redis_server_get_connection_timeout: redis_server_get_connection_timeout,
             cors_allow_all: cors_allow_all,
-        }
-    }
-
-    pub fn db_pool(&self) -> DbPool {
-        log::info!("Creating database connection pool.");
-        // create db connection Pool
-        let manager = ConnectionManager::<PgConnection>::new(&self.database_url);
-        r2d2::Pool::builder()
-            .build(manager) // Aborts if `min_idle` is greater than `max_size`. Need to think about retry
-            .expect("Failed to create pool.".as_ref())
-    }
-
-    pub fn auth_mgr(&self) -> auth::AuthManager {
-        auth::AuthManager::new(
-            self.jwt_secret.clone(),
-            self.jwt_expiration_duration,
-            self.redis_server_url.clone(),
-            self.redis_server_get_connection_timeout,
-        )
-    }
-
-    pub fn cors(&self) -> Cors {
-        if self.cors_allow_all == 1 {
-            log::info!("Allowing Any Origin");
-            Cors::permissive()
-        } else {
-            log::info!("Default Cors Setup");
-            Cors::default()
         }
     }
 }

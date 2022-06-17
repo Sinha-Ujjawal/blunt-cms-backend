@@ -1,10 +1,9 @@
 use crate::{
-    config::{auth::AuthManager, DbPool, DbPoolConnection},
+    db::{actor::DbActor, models::posts::Post, selectors, services},
     errors::MyError,
-    models::posts::Post,
-    selectors, services, views,
+    views, AppState,
 };
-
+use actix::Addr;
 use actix_web::{get, post, web, Either};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use serde::{Deserialize, Serialize};
@@ -34,8 +33,6 @@ impl PostData {
     }
 }
 
-
-
 #[derive(Serialize, Deserialize)]
 struct CreatePostData {
     subject: String,
@@ -43,10 +40,15 @@ struct CreatePostData {
 }
 
 async fn add_post(
-    conn: DbPoolConnection,
-    post_data: web::Json<CreatePostData>,
+    db_actor_addr: Addr<DbActor>,
+    subject: String,
+    body: String,
 ) -> actix_web::Result<Post, MyError> {
-    web::block(move || services::posts::add_post(&conn, &post_data.subject, &post_data.body))
+    db_actor_addr
+        .send(services::posts::AddPost {
+            subject: subject,
+            body: body,
+        })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))
@@ -55,27 +57,31 @@ async fn add_post(
 #[post("/posts/create")]
 async fn create_post(
     bearer_auth: BearerAuth,
-    db: web::Data<DbPool>,
-    auth_mgr: web::Data<AuthManager>,
     post_data: web::Json<CreatePostData>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<PostData>, MyError> {
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _ = views::admins::ensure_admin(bearer_auth, db, auth_mgr).await?;
-    let post = add_post(conn, post_data).await?;
+    let db_actor_addr = app_state.get_ref().db_actor_addr.clone();
+    let post_data = post_data.into_inner();
+    let _ = views::admins::ensure_admin(bearer_auth, app_state).await?;
+    let post = add_post(db_actor_addr, post_data.subject, post_data.body).await?;
     Ok(web::Json(PostData::from_post(&post)))
 }
 
 #[get("/posts/get_posts")]
 async fn get_posts(
     bearer_auth: BearerAuth,
-    db: web::Data<DbPool>,
-    auth_mgr: web::Data<AuthManager>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<Vec<PostData>>, MyError> {
-    let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _: views::users::AuthedUser =
-        views::users::AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
-    conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let posts = web::block(move || selectors::posts::get_posts(&conn))
+    let db_actor_addr = app_state.get_ref().db_actor_addr.clone();
+    let auth_mgr_addr = app_state.get_ref().auth_mgr_addr.clone();
+    let _: views::users::AuthedUser = views::users::AuthedUser::from_bearer_token(
+        db_actor_addr.clone(),
+        auth_mgr_addr,
+        bearer_auth,
+    )
+    .await?;
+    let posts = db_actor_addr
+        .send(selectors::posts::GetPosts::GetPosts)
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))?;
@@ -100,22 +106,30 @@ struct UpdatePostBody {
 type UpdatePostData = Either<web::Json<UpdatePostSubject>, web::Json<UpdatePostBody>>;
 
 async fn update_post_subject(
-    conn: DbPoolConnection,
+    db_actor_addr: Addr<DbActor>,
     post_id: i32,
     new_subject: String,
 ) -> actix_web::Result<Post, MyError> {
-    web::block(move || services::posts::update_post_subject(&conn, post_id, &new_subject))
+    db_actor_addr
+        .send(services::posts::UpdatePostSubject {
+            post_id: post_id,
+            new_subject: new_subject,
+        })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))
 }
 
 async fn update_post_body(
-    conn: DbPoolConnection,
+    db_actor_addr: Addr<DbActor>,
     post_id: i32,
     new_body: String,
 ) -> actix_web::Result<Post, MyError> {
-    web::block(move || services::posts::update_post_body(&conn, post_id, &new_body))
+    db_actor_addr
+        .send(services::posts::UpdatePostBody {
+            post_id: post_id,
+            new_body: new_body,
+        })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))
@@ -125,19 +139,18 @@ async fn update_post_body(
 async fn update_post(
     path: web::Path<i32>,
     bearer_auth: BearerAuth,
-    db: web::Data<DbPool>,
-    auth_mgr: web::Data<AuthManager>,
     new_post_data: UpdatePostData,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<PostData>, MyError> {
     let post_id = path.into_inner();
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _ = views::admins::ensure_admin(bearer_auth, db, auth_mgr).await?;
+    let db_actor_addr = app_state.get_ref().db_actor_addr.clone();
+    let _ = views::admins::ensure_admin(bearer_auth, app_state).await?;
     let post = match new_post_data {
         Either::Left(web::Json(UpdatePostSubject { new_subject })) => {
-            update_post_subject(conn, post_id, new_subject).await?
+            update_post_subject(db_actor_addr, post_id, new_subject).await?
         }
         Either::Right(web::Json(UpdatePostBody { new_body })) => {
-            update_post_body(conn, post_id, new_body).await?
+            update_post_body(db_actor_addr, post_id, new_body).await?
         }
     };
 
@@ -148,17 +161,15 @@ async fn update_post(
 async fn delete_post(
     path: web::Path<i32>,
     bearer_auth: BearerAuth,
-    db: web::Data<DbPool>,
-    auth_mgr: web::Data<AuthManager>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<String, MyError> {
     let post_id = path.into_inner();
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let _ = views::admins::ensure_admin(bearer_auth, db, auth_mgr).await?;
-    web::block(move || {
-        let _ = services::posts::delete_post(&conn, post_id)?;
-        Ok("Success!".to_string())
-    })
-    .await
-    .map_err(|_| MyError::InternalServerError)?
-    .map_err(|err| MyError::DieselError(err))
+    let db_actor_addr = app_state.get_ref().db_actor_addr.clone();
+    let _ = views::admins::ensure_admin(bearer_auth, app_state).await?;
+    let _ = db_actor_addr
+        .send(services::posts::DeletePost { post_id: post_id })
+        .await
+        .map_err(|_| MyError::InternalServerError)?
+        .map_err(|err| MyError::DieselError(err));
+    Ok("Success!".to_string())
 }

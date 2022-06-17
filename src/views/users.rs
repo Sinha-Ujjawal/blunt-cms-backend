@@ -1,16 +1,18 @@
 use crate::{
-    config::auth::AuthManager,
-    config::{DbPool, DbPoolConnection},
+    argon2_password_hasher,
+    auth::actor::AuthManager,
+    auth::actor::{CreateToken, ExtractClaim},
+    db::{actor::DbActor, models::users::User, selectors, services},
     errors::MyError,
-    models::users::User,
     openapi::addons::BearerSecurity,
-    selectors, services, utils,
+    AppState,
 };
-
+use actix::Addr;
 use actix_web::{get, post, web};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 use utoipa::{Component, OpenApi};
 
 #[derive(OpenApi)]
@@ -57,16 +59,16 @@ impl UserData {
             id: user.id,
             username: user.username,
             is_admin: user.is_admin,
-        }   
+        }
     }
 
     pub async fn from_bearer_token(
-        db: web::Data<DbPool>,
-        auth_mgr: web::Data<AuthManager>,
+        db_actor_addr: Addr<DbActor>,
+        auth_mgr_addr: Addr<AuthManager>,
         bearer_auth: BearerAuth,
     ) -> Result<Self, MyError> {
-        let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-        let authed_user = AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
+        let authed_user =
+            AuthedUser::from_bearer_token(db_actor_addr, auth_mgr_addr, bearer_auth).await?;
         Ok(Self::from_user(authed_user.user))
     }
 }
@@ -78,10 +80,14 @@ struct SignUpInput {
 }
 
 async fn add_user(
-    conn: DbPoolConnection,
+    db_actor_addr: Addr<DbActor>,
     input_user: SignUpInput,
 ) -> actix_web::Result<User, MyError> {
-    web::block(move || services::users::add_user(&conn, &input_user.username, &input_user.password))
+    db_actor_addr
+        .send(services::users::AddUser {
+            username: input_user.username,
+            password: input_user.password,
+        })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| match err {
@@ -98,11 +104,11 @@ async fn add_user(
 )]
 #[post("/users/signup")]
 async fn signup(
-    db: web::Data<DbPool>,
     input_user: web::Json<SignUpInput>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user = add_user(conn, input_user.into_inner()).await?;
+    let db_actor_addr = app_state.as_ref().db_actor_addr.clone();
+    let user = add_user(db_actor_addr, input_user.into_inner()).await?;
     Ok(web::Json(UserData::from_user(user)))
 }
 
@@ -118,10 +124,11 @@ struct LogInInput {
 }
 
 async fn get_user_by_username(
-    conn: DbPoolConnection,
-    user_name: String,
+    db_actor_addr: Addr<DbActor>,
+    username: String,
 ) -> actix_web::Result<User, MyError> {
-    web::block(move || selectors::users::get_user_by_username(&conn, &user_name))
+    db_actor_addr
+        .send(selectors::users::GetUserByUsername { username: username })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|_| MyError::UserDoesNotExists)
@@ -135,15 +142,16 @@ async fn get_user_by_username(
 )]
 #[post("/users/login")]
 async fn login(
-    db: web::Data<DbPool>,
     input_user: web::Json<LogInInput>,
-    auth_mgr: web::Data<AuthManager>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<Token>, MyError> {
+    let db_actor_addr = app_state.as_ref().db_actor_addr.clone();
+    let auth_mgr_addr = app_state.as_ref().auth_mgr_addr.clone();
     let password = input_user.password.as_bytes();
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user = get_user_by_username(conn, input_user.username.clone()).await?;
-    if utils::validate_password(&password, &user.password_hash) {
-        let token = web::block(move || auth_mgr.create_token(user.id))
+    let user = get_user_by_username(db_actor_addr, input_user.username.clone()).await?;
+    if argon2_password_hasher::validate_password(&password, &user.password_hash) {
+        let token = auth_mgr_addr
+            .send(CreateToken { data: user.id })
             .await
             .map_err(|_| MyError::InternalServerError)?
             .ok_or(MyError::TokenCreationError)?;
@@ -161,16 +169,21 @@ pub struct AuthedUser {
 
 impl AuthedUser {
     async fn from_token(
-        conn: DbPoolConnection,
-        auth_mgr: web::Data<AuthManager>,
+        db_actor_addr: Addr<DbActor>,
+        auth_mgr_addr: Addr<AuthManager>,
         token: String,
     ) -> Result<Self, MyError> {
-        let user_id = web::block(move || auth_mgr.extract_claim::<i32>(&token))
+        let user_id: i32 = auth_mgr_addr
+            .send(ExtractClaim {
+                token: token,
+                phantom: PhantomData::<i32>,
+            })
             .await
             .map_err(|_| MyError::InternalServerError)?
             .map_err(|_| MyError::TokenValidationError)?;
 
-        let user = web::block(move || selectors::users::get_user_by_user_id(&conn, user_id))
+        let user = db_actor_addr
+            .send(selectors::users::GetUserByUserId { user_id: user_id })
             .await
             .map_err(|_| MyError::InternalServerError)?
             .map_err(|_| MyError::UserDoesNotExists)?;
@@ -182,11 +195,16 @@ impl AuthedUser {
     }
 
     pub async fn from_bearer_token(
-        conn: DbPoolConnection,
-        auth_mgr: web::Data<AuthManager>,
+        db_actor_addr: Addr<DbActor>,
+        auth_mgr_addr: Addr<AuthManager>,
         bearer_auth: BearerAuth,
     ) -> Result<Self, MyError> {
-        Self::from_token(conn, auth_mgr, bearer_auth.token().to_string()).await
+        Self::from_token(
+            db_actor_addr,
+            auth_mgr_addr,
+            bearer_auth.token().to_string(),
+        )
+        .await
     }
 }
 
@@ -201,12 +219,13 @@ impl AuthedUser {
 #[get("/users/validate_token")]
 async fn validate_token(
     bearer_auth: BearerAuth,
-    auth_mgr: web::Data<AuthManager>,
-    db: web::Data<DbPool>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<String, MyError> {
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let db_actor_addr = app_state.as_ref().db_actor_addr.clone();
+    let auth_mgr_addr = app_state.as_ref().auth_mgr_addr.clone();
 
-    let _: AuthedUser = AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
+    let _: AuthedUser =
+        AuthedUser::from_bearer_token(db_actor_addr, auth_mgr_addr, bearer_auth).await?;
 
     Ok("true".to_string())
 }
@@ -222,12 +241,12 @@ async fn validate_token(
 #[get("/users/get_user")]
 async fn get_user(
     bearer_auth: BearerAuth,
-    auth_mgr: web::Data<AuthManager>,
-    db: web::Data<DbPool>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
-    let conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let db_actor_addr = app_state.as_ref().db_actor_addr.clone();
+    let auth_mgr_addr = app_state.as_ref().auth_mgr_addr.clone();
     let authed_user: AuthedUser =
-        AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
+        AuthedUser::from_bearer_token(db_actor_addr, auth_mgr_addr, bearer_auth).await?;
     Ok(web::Json(UserData::from_user(authed_user.user)))
 }
 
@@ -237,11 +256,15 @@ struct UserChangePasswordInput {
 }
 
 async fn update_user_password(
-    conn: DbPoolConnection,
+    db_actor_addr: Addr<DbActor>,
     user_id: i32,
     new_password: String,
 ) -> actix_web::Result<User, MyError> {
-    web::block(move || services::users::update_user_password(&conn, user_id, &new_password))
+    db_actor_addr
+        .send(services::users::UpdateUserPassword {
+            user_id: user_id,
+            new_password: new_password,
+        })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))
@@ -258,18 +281,17 @@ async fn update_user_password(
 )]
 #[post("/users/change_password")]
 async fn change_password(
-    web::Json(UserChangePasswordInput { new_password }): web::Json<UserChangePasswordInput>,
     bearer_auth: BearerAuth,
-    auth_mgr: web::Data<AuthManager>,
-    db: web::Data<DbPool>,
+    web::Json(UserChangePasswordInput { new_password }): web::Json<UserChangePasswordInput>,
+    app_state: web::Data<AppState>,
 ) -> actix_web::Result<web::Json<UserData>, MyError> {
-    let mut conn = db.get().map_err(|_| MyError::InternalServerError)?;
+    let db_actor_addr = app_state.as_ref().db_actor_addr.clone();
+    let auth_mgr_addr = app_state.as_ref().auth_mgr_addr.clone();
 
     let authed_user: AuthedUser =
-        AuthedUser::from_bearer_token(conn, auth_mgr, bearer_auth).await?;
+        AuthedUser::from_bearer_token(db_actor_addr.clone(), auth_mgr_addr, bearer_auth).await?;
 
-    conn = db.get().map_err(|_| MyError::InternalServerError)?;
-    let user = update_user_password(conn, authed_user.user_id, new_password).await?;
+    let user = update_user_password(db_actor_addr, authed_user.user_id, new_password).await?;
 
     Ok(web::Json(UserData::from_user(user)))
 }
