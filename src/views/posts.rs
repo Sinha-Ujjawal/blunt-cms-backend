@@ -131,7 +131,7 @@ async fn get_posts(
         .map(|authed_user| authed_user.user),
     };
     let posts = db_actor_addr
-        .send(selectors::posts::GetPosts::GetPosts)
+        .send(selectors::posts::GetPosts::GetPublishedPosts)
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|err| MyError::DieselError(err))?;
