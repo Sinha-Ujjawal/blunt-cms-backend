@@ -5,8 +5,6 @@ use actix::{Addr, SyncArbiter};
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web::Data, App, HttpServer};
 use dotenv::dotenv;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 mod argon2_password_hasher;
 mod auth;
@@ -69,10 +67,7 @@ async fn main() -> std::io::Result<()> {
             .configure(views::users::config)
             .configure(views::posts::config)
             .configure(views::drafts::config)
-            .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}")
-                    .url("/api-doc/openapi.json", views::users::ApiDoc::openapi()),
-            )
+            .configure(views::swagger_ui::config)
     })
     .bind((host, port))?
     .run()

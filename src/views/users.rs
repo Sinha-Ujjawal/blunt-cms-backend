@@ -4,7 +4,6 @@ use crate::{
     auth::actor::{CreateToken, ExtractClaim},
     db::{actor::DbActor, models::users::User, selectors, services},
     errors::MyError,
-    openapi::addons::BearerSecurity,
     AppState,
 };
 use actix::Addr;
@@ -13,30 +12,7 @@ use actix_web_httpauth::extractors::bearer::BearerAuth;
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-use utoipa::{Component, OpenApi};
-
-#[derive(OpenApi)]
-#[openapi(
-    handlers(
-        signup,
-        login,
-        get_user,
-        validate_token,
-        change_password,
-    ),
-    components(
-        UserData,
-        SignUpInput,
-        Token,
-        LogInInput,
-        UserChangePasswordInput,
-    ),
-    tags(
-        (name = "/users", description = "Content Management System Apis (User Auth)")
-    ),
-    modifiers(&BearerSecurity)
-)]
-pub struct ApiDoc;
+use utoipa::Component;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(signup)
@@ -74,7 +50,7 @@ impl UserData {
 }
 
 #[derive(Debug, Serialize, Deserialize, Component)]
-struct SignUpInput {
+pub struct SignUpInput {
     username: String,
     password: String,
 }
@@ -113,12 +89,12 @@ async fn signup(
 }
 
 #[derive(Serialize, Deserialize, Component)]
-struct Token {
+pub struct Token {
     token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Component)]
-struct LogInInput {
+pub struct LogInInput {
     username: String,
     password: String,
 }
@@ -251,7 +227,7 @@ async fn get_user(
 }
 
 #[derive(Serialize, Deserialize, Component)]
-struct UserChangePasswordInput {
+pub struct UserChangePasswordInput {
     new_password: String,
 }
 

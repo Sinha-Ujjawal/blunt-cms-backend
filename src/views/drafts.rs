@@ -7,13 +7,14 @@ use actix::Addr;
 use actix_web::{post, web};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use serde::{Deserialize, Serialize};
+use utoipa::Component;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(create_draft);
 }
 
-#[derive(Serialize, Deserialize)]
-struct DraftData {
+#[derive(Serialize, Deserialize, Component)]
+pub struct DraftData {
     id: i32,
     subject: String,
     body: String,
@@ -31,8 +32,8 @@ impl DraftData {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct CreateDraftData {
+#[derive(Serialize, Deserialize, Component)]
+pub struct CreateDraftData {
     subject: String,
     body: String,
     post_id: Option<i32>,
@@ -55,6 +56,15 @@ async fn add_draft(
         .map_err(|err| MyError::DieselError(err))
 }
 
+#[utoipa::path(
+    request_body=CreateDraftData,
+    responses(
+        (status = 200, description = "Create a draft", body = DraftData)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[post("/drafts/create")]
 async fn create_draft(
     bearer_auth: BearerAuth,
