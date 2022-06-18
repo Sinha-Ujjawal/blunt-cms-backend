@@ -1,19 +1,10 @@
 table! {
-    drafts (id) {
-        id -> Int4,
-        draft_subject -> Text,
-        draft_body -> Text,
-        post_id -> Nullable<Int4>,
-        created_at -> Timestamp,
-        updated_at -> Timestamp,
-    }
-}
-
-table! {
     posts (id) {
         id -> Int4,
         post_subject -> Text,
         post_body -> Text,
+        published_status -> Varchar,
+        user_id -> Int4,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }
@@ -30,10 +21,9 @@ table! {
     }
 }
 
-joinable!(drafts -> posts (post_id));
+joinable!(posts -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
-    drafts,
     posts,
     users,
 );

@@ -1,6 +1,6 @@
 use crate::{
     openapi::addons::BearerSecurity,
-    views::{drafts::*, users::*},
+    views::{users::*, posts::*},
 };
 use actix_web::{get, http::StatusCode, web, HttpResponse};
 use utoipa::OpenApi;
@@ -15,8 +15,12 @@ use utoipa_swagger_ui::SwaggerUi;
         get_user,
         validate_token,
         change_password,
-        // drafts
-        create_draft
+        // posts
+        create_post,
+        get_posts,
+        update_post_subject_handler,
+        update_post_body_handler,
+        delete_post,
     ),
     components(
         // users
@@ -25,9 +29,11 @@ use utoipa_swagger_ui::SwaggerUi;
         Token,
         LogInInput,
         UserChangePasswordInput,
-        // drafts
-        DraftData,
-        CreateDraftData,
+        // posts
+        PostData,
+        CreatePostData,
+        UpdatePostSubject,
+        UpdatePostBody,
     ),
     tags(
         (name = "Content Management System", description = "Content Management System Apis")

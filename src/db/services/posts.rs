@@ -1,6 +1,6 @@
 use crate::{
     db::actor::DbActor,
-    db::models::posts::{NewPost, Post},
+    db::models::posts::{NewPost, Post, PublishStatus},
 };
 use actix::{Handler, Message};
 use diesel::prelude::*;
@@ -10,6 +10,7 @@ use diesel::prelude::*;
 pub struct AddPost {
     pub subject: String,
     pub body: String,
+    pub user_id: i32,
 }
 
 impl Handler<AddPost> for DbActor {
@@ -22,6 +23,8 @@ impl Handler<AddPost> for DbActor {
         let new_post = NewPost {
             post_subject: &msg.subject,
             post_body: &msg.body,
+            user_id: msg.user_id,
+            published_status: &format!("{}", PublishStatus::Unpublished)
         };
 
         let res = diesel::insert_into(posts)

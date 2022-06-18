@@ -30,6 +30,9 @@ pub enum MyError {
 
     #[display(fmt = "You need to be a admin to perform this action!")]
     NotAdmin,
+
+    #[display(fmt = "You dont own this post")]
+    YouDontOwnThisPost,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,6 +68,7 @@ impl ResponseError for MyError {
             InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
             IncorrectPassword => StatusCode::BAD_REQUEST,
             NotAdmin => StatusCode::UNAUTHORIZED,
+            YouDontOwnThisPost => StatusCode::UNAUTHORIZED,
         }
     }
 }

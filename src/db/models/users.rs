@@ -2,7 +2,7 @@ use crate::db::schema::users;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Identifiable, Serialize, Deserialize, Queryable)]
+#[derive(Debug, Identifiable, Serialize, Deserialize, Queryable, Clone)]
 #[table_name = "users"]
 pub struct User {
     pub id: i32,

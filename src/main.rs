@@ -66,7 +66,6 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default()) // enable logger
             .configure(views::users::config)
             .configure(views::posts::config)
-            .configure(views::drafts::config)
             .configure(views::swagger_ui::config)
     })
     .bind((host, port))?
