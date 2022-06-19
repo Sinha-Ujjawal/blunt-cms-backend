@@ -48,14 +48,17 @@ async fn main() -> std::io::Result<()> {
         config.redis_server_get_connection_timeout,
     );
 
-    let db_actor_addr = SyncArbiter::start(5, move || db_actor.clone());
-    let auth_mgr_addr = SyncArbiter::start(5, move || auth_mgr.clone());
+    let num_of_cpus = num_cpus::get();
+
+    let db_actor_addr = SyncArbiter::start(num_of_cpus, move || db_actor.clone());
+    let auth_mgr_addr = SyncArbiter::start(num_of_cpus >> 1, move || auth_mgr.clone());
 
     let app_state = AppState {
         db_actor_addr: db_actor_addr,
         auth_mgr_addr: auth_mgr_addr,
     };
 
+    log::info!("Number of Logical Cores: {}", num_of_cpus);
     log::info!("Started server on: http://{}:{}", host, port);
 
     HttpServer::new(move || {

@@ -522,6 +522,7 @@ dependencies = [
  "env_logger",
  "jsonwebtoken",
  "log",
+ "num_cpus",
  "r2d2",
  "r2d2_redis",
  "serde",
