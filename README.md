@@ -12,6 +12,7 @@ According to [Wikipedia](https://en.wikipedia.org/wiki/Content_management_system
 cargo run
 ```
 4. You can change configuration of the server like database url, etc. by changing [.env](.env) file.
+5. Visit `http://{HOST}:{PORT}/api-doc/ui.html` for swagger-ui
 
 ## Copyrights
 Licensed under [@MIT](./LICENSE)
