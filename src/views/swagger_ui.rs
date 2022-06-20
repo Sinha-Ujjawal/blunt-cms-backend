@@ -18,14 +18,16 @@ use utoipa_swagger_ui::SwaggerUi;
         // posts
         create_post,
         get_posts,
+        get_drafts,
         update_post_subject_handler,
         update_post_body_handler,
         delete_post,
+        request_admin_to_publish,
     ),
     components(
         // users
         UserData,
-        SignUpInput,
+        SignUpInput, SignUpResponse,
         Token,
         LogInInput,
         UserChangePasswordInput,

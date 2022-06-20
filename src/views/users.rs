@@ -55,6 +55,14 @@ pub struct SignUpInput {
     password: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Component)]
+pub struct SignUpResponse {
+    pub id: i32,
+    pub username: String,
+    pub is_admin: bool,
+    pub token: String,
+}
+
 async fn add_user(
     db_actor_addr: Addr<DbActor>,
     input_user: SignUpInput,
@@ -75,17 +83,29 @@ async fn add_user(
 #[utoipa::path(
     request_body=SignUpInput,
     responses(
-        (status = 200, description = "Sign up", body = UserData)
+        (status = 200, description = "Sign up", body = SignUpResponse)
     )
 )]
 #[post("/users/signup")]
 async fn signup(
     input_user: web::Json<SignUpInput>,
     app_state: web::Data<AppState>,
-) -> actix_web::Result<web::Json<UserData>, MyError> {
+) -> actix_web::Result<web::Json<SignUpResponse>, MyError> {
     let db_actor_addr = app_state.as_ref().db_actor_addr.clone();
+    let auth_mgr_addr = app_state.as_ref().auth_mgr_addr.clone();
     let user = add_user(db_actor_addr, input_user.into_inner()).await?;
-    Ok(web::Json(UserData::from_user(user)))
+    let token = auth_mgr_addr
+        .send(CreateToken { data: user.id })
+        .await
+        .map_err(|_| MyError::InternalServerError)?
+        .ok_or(MyError::TokenCreationError)?;
+    let res = SignUpResponse {
+        id: user.id,
+        username: user.username,
+        is_admin: user.is_admin,
+        token: token,
+    };
+    Ok(web::Json(res))
 }
 
 #[derive(Serialize, Deserialize, Component)]
