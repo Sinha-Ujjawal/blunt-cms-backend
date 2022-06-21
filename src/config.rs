@@ -11,7 +11,7 @@ pub struct Config {
     pub jwt_expiration_duration: u32,
     pub redis_server_url: String,
     pub redis_server_get_connection_timeout: u64,
-    pub cors_allow_all: u8,
+    pub cors_allow_all: bool,
 }
 
 fn env_var_not_set_msg(env_var: &str) -> String {
@@ -54,7 +54,7 @@ impl Config {
         let redis_server_url: String = read_from_env("REDIS_SERVER_URL");
         let redis_server_get_connection_timeout: u64 =
             read_from_env("REDIS_SERVER_GET_CONNECTION_TIMEOUT");
-        let cors_allow_all: u8 = read_from_env("CORS_ALLOW_ALL");
+        let cors_allow_all: bool = read_from_env::<u8>("CORS_ALLOW_ALL") == 1;
 
         Config {
             host: host,

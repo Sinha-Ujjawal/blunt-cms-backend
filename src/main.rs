@@ -21,8 +21,8 @@ pub struct AppState {
     auth_mgr_addr: Addr<AuthManager>,
 }
 
-fn cors(cors_allow_all: u8) -> Cors {
-    if cors_allow_all == 1 {
+fn cors(cors_allow_all: bool) -> Cors {
+    if cors_allow_all {
         log::info!("Allowing Any Origin");
         Cors::permissive()
     } else {
