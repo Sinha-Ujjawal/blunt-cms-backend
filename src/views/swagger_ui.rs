@@ -23,6 +23,7 @@ use utoipa_swagger_ui::SwaggerUi;
         update_post_body_handler,
         delete_post,
         request_admin_to_publish,
+        publish_post,
     ),
     components(
         // users

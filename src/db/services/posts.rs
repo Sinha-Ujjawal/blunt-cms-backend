@@ -123,3 +123,25 @@ impl Handler<RequestToPublishPost> for DbActor {
         Ok(res)
     }
 }
+
+#[derive(Message)]
+#[rtype(result = "Result<Post, diesel::result::Error>")]
+pub struct PublishPost {
+    pub post_id: i32,
+}
+
+impl Handler<PublishPost> for DbActor {
+    type Result = Result<Post, diesel::result::Error>;
+
+    fn handle(&mut self, msg: PublishPost, _: &mut Self::Context) -> Self::Result {
+        let conn = self.get_conn();
+        use crate::db::schema::posts::dsl::*;
+        let res = diesel::update(posts.filter(id.eq(msg.post_id)))
+            .set((
+                published_status.eq(format!("{}", PublishStatus::Published)),
+                updated_at.eq(now),
+            ))
+            .get_result(&conn)?;
+        Ok(res)
+    }
+}

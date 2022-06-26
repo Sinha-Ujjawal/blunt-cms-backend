@@ -21,7 +21,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(update_post_subject_handler)
         .service(update_post_body_handler)
         .service(delete_post)
-        .service(request_admin_to_publish);
+        .service(request_admin_to_publish)
+        .service(publish_post);
 }
 
 #[derive(Serialize, Deserialize, Component)]
@@ -375,7 +376,7 @@ async fn delete_post(
         ("post_id" = i32, path, description = "Post database id"),
     ),
     responses(
-        (status = 200, description = "Get Posts", body = [PostData])
+        (status = 200, description = "Request To Publish", body = [PostData])
     ),
     security(
         ("bearer_auth" = [])
@@ -403,6 +404,36 @@ async fn request_admin_to_publish(
             post_id: post_id,
             user_id: authed_user.user.id,
         })
+        .await
+        .map_err(|_| MyError::InternalServerError)?
+        .map_err(|e| MyError::DieselError(e))?;
+
+    Ok("Success".into())
+}
+
+#[utoipa::path(
+    params(
+        ("post_id" = i32, path, description = "Post database id"),
+    ),
+    responses(
+        (status = 200, description = "", body = [PostData])
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+#[post("/posts/publish/{post_id}")]
+async fn publish_post(
+    bearer_auth: BearerAuth,
+    post_id: web::Path<i32>,
+    app_state: web::Data<AppState>,
+) -> actix_web::Result<String, MyError> {
+    let post_id = post_id.into_inner();
+    let db_actor_addr = app_state.get_ref().db_actor_addr.clone();
+    let _: views::users::AuthedUser =
+        views::admins::ensure_admin(bearer_auth, app_state).await?;
+    let _ = db_actor_addr
+        .send(services::posts::PublishPost { post_id: post_id })
         .await
         .map_err(|_| MyError::InternalServerError)?
         .map_err(|e| MyError::DieselError(e))?;
